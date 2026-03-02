@@ -77,38 +77,22 @@ TOOLS: list[ToolDef] = [
         input_schema={
             "type": "object",
             "properties": {
-                "target": {
-                    "oneOf": [
-                        {
-                            "type": "object",
-                            "title": "Coordinate",
-                            "properties": {
-                                "x": {"type": "number"},
-                                "y": {"type": "number"},
-                                "z": {"type": "number"},
-                            },
-                            "required": ["x", "z"],
-                        },
-                        {
-                            "type": "string",
-                            "title": "Entity or direction",
-                            "description": (
-                                "Either an entity type ('zombie', 'chest'), "
-                                "a cardinal direction ('north', 'south', 'east', 'west', 'up', 'down'), "
-                                "or a special keyword ('spawn', 'away_from_danger')."
-                            ),
-                        },
-                    ],
-                    "description": "Destination — coordinate object, entity type, or direction keyword.",
+                "from": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                    "minItems": 3,
+                    "maxItems": 3,
+                    "description": "Starting position [x, y, z].",
                 },
-                "speed": {
-                    "type": "string",
-                    "enum": ["walk", "sprint", "sneak"],
-                    "description": "Movement speed tier. Defaults to 'walk'.",
-                    "default": "walk",
+                "to": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                    "minItems": 3,
+                    "maxItems": 3,
+                    "description": "Destination position [x, y, z].",
                 },
             },
-            "required": ["target"],
+            "required": ["from", "to"],
         },
     ),
 
@@ -174,10 +158,9 @@ TOOLS: list[ToolDef] = [
         name="interact",
         title="Interact",
         description=(
-            "Perform a targeted interaction with a block or entity: "
-            "eat food, place a block, equip gear, open a container, or activate a device. "
-            "Choose mode carefully — 'place' is for block placement, "
-            "'equip' is for armour/tools, 'consume' is for food/potions."
+            "Open or inspect a container or interactable block. "
+            "Recorded when the player opens a chest, barrel, furnace, etc. "
+            "A 'transfer' record follows if items were moved."
         ),
         input_schema={
             "type": "object",
@@ -185,24 +168,12 @@ TOOLS: list[ToolDef] = [
                 "target": {
                     "type": "string",
                     "description": (
-                        "Block id, entity type, or item id, e.g. "
-                        "'chest', 'villager', 'bread', 'iron_door'."
-                    ),
-                },
-                "mode": {
-                    "type": "string",
-                    "enum": ["consume", "place", "equip", "open", "activate", "use"],
-                    "description": (
-                        "consume — eat/drink; "
-                        "place — place held block; "
-                        "equip — put on armour or switch held tool; "
-                        "open — open inventory/container; "
-                        "activate — right-click lever/button/door; "
-                        "use — generic right-click."
+                        "Container type opened, e.g. 'chest', 'ender_chest', "
+                        "'furnace', 'hopper', 'dispenser'."
                     ),
                 },
             },
-            "required": ["target", "mode"],
+            "required": ["target"],
         },
     ),
 
@@ -228,8 +199,11 @@ TOOLS: list[ToolDef] = [
                 },
                 "strategy": {
                     "type": "string",
-                    "enum": ["melee", "ranged", "flee"],
-                    "description": "Combat posture.",
+                    "description": (
+                        "Combat posture. Core values: 'melee', 'ranged', 'flee'. "
+                        "Plugin may append '+shield' when a shield block was used, "
+                        "e.g. 'melee+shield'."
+                    ),
                 },
             },
             "required": ["target_entity", "strategy"],
@@ -240,30 +214,31 @@ TOOLS: list[ToolDef] = [
         name="transfer",
         title="Transfer Item",
         description=(
-            "Move an item from the player's inventory to a container or device slot. "
-            "Destinations: 'chest', 'furnace_input', 'furnace_fuel', 'drop' (throw on ground). "
-            "Use 'drop' when discarding unwanted items. "
-            "Must be standing adjacent to the target container (within 4 blocks)."
+            "Move items between the player's inventory and a container. "
+            "Recorded when the player closes a chest/furnace/etc after moving items. "
+            "direction: 'take' = player took items from container; "
+            "'put' = player put items into container; "
+            "'both' = items moved in both directions."
         ),
         input_schema={
             "type": "object",
             "properties": {
-                "item": {
+                "direction": {
                     "type": "string",
-                    "description": "Item id to transfer, e.g. 'cobblestone', 'raw_iron'.",
+                    "enum": ["take", "put", "both"],
+                    "description": "Direction items were moved.",
                 },
-                "destination": {
+                "container": {
                     "type": "string",
-                    "enum": ["chest", "furnace_input", "furnace_fuel", "drop"],
-                    "description": "Where to send the item.",
+                    "description": "Container type, e.g. 'chest', 'furnace', 'hopper'.",
                 },
-                "count": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "description": "Number of items to transfer. Defaults to all of that type.",
+                "items": {
+                    "type": "object",
+                    "description": "Map of item id to quantity transferred.",
+                    "additionalProperties": {"type": "integer"},
                 },
             },
-            "required": ["item", "destination"],
+            "required": ["direction", "container", "items"],
         },
     ),
 
