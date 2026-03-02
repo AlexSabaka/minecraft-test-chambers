@@ -1,0 +1,38 @@
+# test_chambers/open_plains.yaml
+# Wide open plains, daytime, ideal for exploration.
+# Varied terrain with occasional resources visible on the surface.
+
+name: open_plains
+description: "Wide open plains in daylight — varied terrain, no mobs, good visibility"
+seed: 404
+
+features:
+  biome: minecraft:plains
+  time: day
+  weather: clear
+  difficulty: peaceful
+
+  ores:
+    - type: coal_ore
+      count: [2, 4]
+      area: [-14, -63, -14, 14, -63, 14]
+
+    - type: iron_ore
+      count: [1, 2]
+      area: [-10, -63, -10, 10, -63, 10]
+
+  trees:
+    - type: oak
+      count: [1, 3]
+      area: [-15, -63, -15, 15, -63, 15]
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+
+sim_state:
+  biomes: [plains, desert, taiga, forest, mountains, savanna]
+  y_range: [50, 100]
+  nearby_blocks: [stone, dirt, grass_block, oak_log, sand, gravel, coal_ore, clay, iron_ore]
+  mob_count: 0
+  mob_pool: []
+  light_range: [12, 15]

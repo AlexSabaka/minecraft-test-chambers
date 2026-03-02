@@ -1,0 +1,62 @@
+# test_chambers/end_island.yaml
+# A fragment of the End — chorus trees replaced by dark oak, endermen roam freely.
+# Pure darkness, eerie silence, extreme danger.
+
+name: end_island
+description: "The End — endermen patrol an obsidian ruin under an eternal night sky"
+seed: 588
+
+features:
+  biome: minecraft:the_end
+  time: midnight
+  weather: clear
+  difficulty: extreme
+
+  ores:
+    - type: obsidian
+      count: [3, 6]
+      area: [-12, -63, -12, 12, -63, 12]
+      vein_size: 0
+
+    - type: end_stone
+      count: [5, 10]
+      area: [-14, -63, -14, 14, -63, 14]
+      replace: grass_block
+      vein_size: 1
+
+  mobs:
+    - type: enderman
+      count: [3, 5]
+      area: [-13, -62, -13, 13, -62, 13]
+      difficulty: extreme
+
+    - type: phantom
+      count: [1, 2]
+      area: [-10, -62, -10, 10, -62, 10]
+      difficulty: hard
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+
+  raw_cmds:
+    # Replace floor with end stone
+    - "fill -30 -63 -30 30 -63 30 end_stone"
+    # Obsidian pillar stump at the centre — like a broken portal
+    - "fill -2 -63 -2 2 -60 2 obsidian hollow"
+    - "fill -1 -60 -1 1 -60 1 crying_obsidian"
+    # End rods for eerie lighting
+    - "setblock -8 -62 0 end_rod[facing=up]"
+    - "setblock 8 -62 0 end_rod[facing=up]"
+    - "setblock 0 -62 -8 end_rod[facing=up]"
+    - "setblock 0 -62 8 end_rod[facing=up]"
+    # Purpur platform fragments
+    - "fill -5 -63 7 5 -63 12 purpur_block"
+    - "fill -5 -63 -12 5 -63 -7 purpur_block"
+
+sim_state:
+  biomes: [the_end, end_midlands, end_highlands]
+  y_range: [50, 60]
+  nearby_blocks: [end_stone, obsidian, crying_obsidian, purpur_block, end_rod]
+  mob_count: 6
+  mob_pool: [enderman, phantom]
+  light_range: [0, 3]

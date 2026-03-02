@@ -1,0 +1,58 @@
+# test_chambers/village_assault.yaml
+# A pillager ambush on a peaceful plains village.
+# Extreme difficulty — pillagers, vindicators, and an evoker leading the charge.
+
+name: village_assault
+description: "Pillager raid at dawn — pillagers, vindicators, and a vex-summoning evoker"
+seed: 366
+
+features:
+  biome: minecraft:plains
+  time: dawn
+  weather: clear
+  difficulty: extreme
+
+  trees:
+    - type: oak
+      count: [1, 3]
+      area: [-15, -63, -15, 15, -63, 15]
+
+  mobs:
+    - type: pillager
+      count: [4, 6]
+      area: [-13, -62, -13, 13, -62, 13]
+      difficulty: extreme
+
+    - type: vindicator
+      count: [2, 3]
+      area: [-10, -62, -10, 10, -62, 10]
+      difficulty: extreme
+
+    - type: evoker
+      count: [1, 1]
+      area: [-6, -62, -6, 6, -62, 6]
+      difficulty: extreme
+
+    - type: ravager
+      count: [0, 1]
+      area: [-8, -62, -8, 8, -62, 8]
+      difficulty: hard
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+
+  raw_cmds:
+    # Give the player a shield and sword for the fight
+    - "give @a minecraft:iron_sword 1"
+    - "give @a minecraft:shield 1"
+    # A "village" cobblestone platform to defend
+    - "fill -6 -63 -6 6 -63 6 cobblestone"
+    - "fill -6 -63 -6 6 -63 6 air replace air"
+
+sim_state:
+  biomes: [plains, meadow, sunflower_plains]
+  y_range: [60, 72]
+  nearby_blocks: [grass_block, oak_log, cobblestone, dirt, gravel]
+  mob_count: 9
+  mob_pool: [pillager, vindicator, evoker, ravager]
+  light_range: [6, 10]

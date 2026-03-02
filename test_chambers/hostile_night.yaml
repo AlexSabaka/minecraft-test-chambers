@@ -1,0 +1,45 @@
+# test_chambers/hostile_night.yaml
+# Nighttime with hostile mob packs nearby.
+# Designed for combat and defence scenarios.
+
+name: hostile_night
+description: "Dark night with zombie, skeleton and spider packs spawned nearby"
+seed: 303
+
+features:
+  biome: minecraft:plains
+  time: night
+  weather: clear
+  difficulty: normal
+
+  mobs:
+    - type: zombie
+      count: [2, 4]
+      area: [-9, -62, -9, 9, -62, 9]
+      difficulty: normal
+
+    - type: skeleton
+      count: [1, 3]
+      area: [-9, -62, -9, 9, -62, 9]
+      difficulty: normal
+
+    - type: spider
+      count: [1, 2]
+      area: [-9, -62, -9, 9, -62, 9]
+      difficulty: normal
+
+    - type: creeper
+      count: [0, 1]
+      area: [-7, -62, -7, 7, -62, 7]
+      difficulty: normal
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+
+sim_state:
+  biomes: [plains, forest, taiga]
+  y_range: [58, 70]
+  nearby_blocks: [stone, dirt, grass_block, cobblestone]
+  mob_count: 5
+  mob_pool: [zombie, skeleton, spider, creeper]
+  light_range: [0, 7]

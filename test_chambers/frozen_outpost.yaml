@@ -1,0 +1,50 @@
+# test_chambers/frozen_outpost.yaml
+# A freezing tundra at night. The player suffers from cold (slowness)
+# and must navigate powder snow traps to reach the warmth of an igloo.
+
+name: frozen_outpost
+description: "Freezing blizzard conditions — powder snow traps, strays, desperate search for warmth"
+seed: 3318
+
+features:
+  biome: minecraft:ice_spikes
+  time: night
+  weather: rain
+  difficulty: hard
+
+  trees:
+    - type: spruce
+      count: [2, 5]
+      area: [-15, -63, -15, 15, -63, 15]
+
+  mobs:
+    - type: stray
+      count: [1, 3]
+      area: [-12, -62, -12, 12, -62, 12]
+      difficulty: hard
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+
+  raw_cmds:
+    # Simulate the freezing cold via a slowness effect
+    - "effect give @a minecraft:slowness 10000 1 true"
+    # Build a small snow igloo shelter
+    - "fill -3 -63 -3 3 -59 3 snow_block hollow"
+    - "setblock 0 -62 3 air"
+    - "setblock 0 -61 3 air"
+    # Inside the shelter: Campfire and survival gear
+    - "setblock 0 -63 0 campfire"
+    - "setblock -2 -62 -2 chest{Items:[{id:\"minecraft:leather_boots\",Count:1b,Slot:0b}, {id:\"minecraft:stone_sword\",Count:1b,Slot:1b}]}"
+    # Dangerous powder snow traps scattered outside
+    - "fill 4 -63 4 6 -63 6 powder_snow"
+    - "fill -6 -63 -4 -4 -63 -2 powder_snow"
+    - "setblock -2 -63 5 powder_snow"
+
+sim_state:
+  biomes: [ice_spikes, snowy_tundra, snowy_taiga]
+  y_range: [60, 85]
+  nearby_blocks: [snow_block, snow, packed_ice, blue_ice, spruce_log, powder_snow]
+  mob_count: 2
+  mob_pool: [stray]
+  light_range: [0, 6]

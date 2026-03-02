@@ -1,0 +1,25 @@
+# test_chambers/plains_day.yaml
+# Flat plains in daylight, peaceful and open.
+# Generic daytime environment suitable for crafting, building, chatting,
+# or any task that doesn't require a specific terrain type.
+
+name: plains_day
+description: "Flat plains in daylight — peaceful, open, no mobs"
+seed: 505
+
+features:
+  biome: minecraft:plains
+  time: day
+  weather: clear
+  difficulty: peaceful
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+
+sim_state:
+  biomes: [plains, savanna, forest, birch_forest, sunflower_plains]
+  y_range: [60, 75]
+  nearby_blocks: [grass_block, dirt, stone, oak_log, gravel, cobblestone]
+  mob_count: 0
+  mob_pool: []
+  light_range: [12, 15]

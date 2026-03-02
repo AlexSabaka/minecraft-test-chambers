@@ -1,0 +1,63 @@
+# test_chambers/swamp_night.yaml
+# Murky swamp after dark — ankle-deep tension, slimes and a roaming witch.
+# Good for test cases requiring status effects or mob avoidance.
+
+name: swamp_night
+description: "Murky swamp at night with rain — slimes, witch, twisted oaks"
+seed: 933
+
+features:
+  biome: minecraft:swamp
+  time: midnight
+  weather: rain
+  difficulty: hard
+
+  trees:
+    - type: oak
+      count: [3, 5]
+      area: [-13, -63, -13, 13, -63, 13]
+
+  ores:
+    - type: clay
+      count: [4, 8]
+      area: [-14, -63, -14, 14, -63, 14]
+
+  mobs:
+    - type: slime
+      count: [2, 4]
+      area: [-12, -62, -12, 12, -62, 12]
+      difficulty: hard
+
+    - type: witch
+      count: [1, 2]
+      area: [-10, -62, -10, 10, -62, 10]
+      difficulty: hard
+
+    - type: drowned
+      count: [0, 2]
+      area: [-10, -62, -10, 10, -62, 10]
+      difficulty: hard
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+
+  raw_cmds:
+    # Muddy patches
+    - "fill -14 -63 -14 14 -63 14 mud replace grass_block"
+    # Small shallow water pools
+    - "fill -6 -63 -6 -2 -63 -2 water"
+    - "fill 3 -63 4 7 -63 8 water"
+    # Lily pads on water
+    - "setblock -4 -62 -4 lily_pad"
+    - "setblock 5 -62 6 lily_pad"
+    # Hanging vines from tree trunks (decorative)
+    - "setblock -5 -61 -3 vine[south=true]"
+    - "setblock 4 -61 7 vine[north=true]"
+
+sim_state:
+  biomes: [swamp, mangrove_swamp]
+  y_range: [56, 66]
+  nearby_blocks: [mud, water, lily_pad, oak_log, oak_leaves, vine, clay, dirt, grass_block]
+  mob_count: 6
+  mob_pool: [slime, witch, drowned]
+  light_range: [0, 4]

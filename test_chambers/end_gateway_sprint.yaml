@@ -1,0 +1,75 @@
+# test_chambers/end_gateway_sprint.yaml
+# The player spawns on the outer End islands. The goal is to cross several chorus
+# platforms, avoid the void, and reach the end gateway crystal to return home.
+# Endermen are everywhere. Breaking eye contact kills focus; any block break risks
+# aggro. A single misstep means falling into the void.
+
+name: end_gateway_sprint
+description: "Outer End islands — platform-hop through endermen and the void to reach the gateway"
+seed: 7734
+
+features:
+  biome: minecraft:the_end
+  time: night
+  weather: clear
+  difficulty: hard
+
+  ores:
+    - type: end_stone
+      count: [0, 0]
+      area: [0, 0, 0, 0, 0, 0]
+
+  mobs:
+    - type: enderman
+      count: [4, 7]
+      area: [-14, -62, -14, 14, -62, 14]
+      difficulty: hard
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+
+  raw_cmds:
+    # Void floor — replace everything below with air (simulate falling death zone)
+    - "fill -30 -65 -30 30 -65 30 air"
+    # Main starting island
+    - "fill -6 -63 -6 6 -63 6 end_stone"
+    - "fill -6 -64 -6 6 -64 6 end_stone"
+    # Chorus flower clusters on the main island
+    - "setblock -4 -63 -4 chorus_plant"
+    - "setblock -4 -62 -4 chorus_plant"
+    - "setblock -4 -61 -4 chorus_flower[age=3]"
+    - "setblock 4 -63 4 chorus_plant"
+    - "setblock 4 -62 4 chorus_plant"
+    - "setblock 4 -61 4 chorus_flower[age=2]"
+    # Stepping stone islands bridging toward the gateway
+    - "fill 9 -63 0 13 -63 4 end_stone"
+    - "fill 16 -63 -3 20 -63 1 end_stone"
+    - "fill 23 -63 -2 26 -63 2 end_stone"
+    # A narrow purpur bridge segment (fallen pillar remnant)
+    - "fill 13 -63 2 16 -63 2 purpur_block"
+    # Chorus on intermediate islands
+    - "setblock 11 -63 2 chorus_plant"
+    - "setblock 11 -62 2 chorus_flower[age=4]"
+    - "setblock 18 -63 -1 chorus_plant"
+    - "setblock 18 -62 -1 chorus_flower[age=1]"
+    # Gateway island — small, precious
+    - "fill 28 -63 -3 32 -63 3 end_stone"
+    # End gateway beacon
+    - "setblock 30 -62 0 end_gateway"
+    # Obsidian pillar remnant near gateway for atmosphere
+    - "fill 26 -63 0 26 -58 0 obsidian"
+    - "setblock 26 -57 0 end_rod"
+    # Loot — chorus fruit (essential for gap-crossing) hidden on starting island
+    - "setblock 0 -62 -5 item_frame{Item:{id:\"minecraft:chorus_fruit\",Count:8b}}"
+    # Purpur slab stepping aid on the hardest gap
+    - "setblock 21 -63 -1 purpur_slab"
+    - "setblock 22 -63 -1 purpur_slab"
+
+sim_state:
+  biomes: [the_end, small_end_islands, end_highlands]
+  y_range: [55, 75]
+  nearby_blocks: [end_stone, chorus_plant, chorus_flower, purpur_block, purpur_slab,
+                  obsidian, end_gateway, end_rod]
+  mob_count: 5
+  mob_pool: [enderman]
+  light_range: [0, 5]

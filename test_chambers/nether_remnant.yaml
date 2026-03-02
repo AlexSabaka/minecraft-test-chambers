@@ -1,0 +1,75 @@
+# test_chambers/nether_remnant.yaml
+# The overworld scorched and twisted into a nether remnant.
+# Netherrack floor, wither skeletons, blaze heat — no escape feels close.
+
+name: nether_remnant
+description: "Nether-scorched arena — netherrack floor, blaze fire, wither skeleton patrol"
+seed: 477
+
+features:
+  biome: minecraft:nether_wastes
+  time: midnight
+  weather: clear
+  difficulty: hard
+
+  ores:
+    - type: nether_quartz_ore
+      count: [4, 8]
+      area: [-12, -63, -12, 12, -63, 12]
+      replace: netherrack
+      vein_size: 1
+
+    - type: nether_gold_ore
+      count: [2, 4]
+      area: [-10, -63, -10, 10, -63, 10]
+      replace: netherrack
+      vein_size: 0
+
+    - type: ancient_debris
+      count: [0, 2]
+      area: [-8, -63, -8, 8, -63, 8]
+      vein_size: 0
+
+  mobs:
+    - type: wither_skeleton
+      count: [2, 3]
+      area: [-12, -62, -12, 12, -62, 12]
+      difficulty: hard
+
+    - type: blaze
+      count: [1, 2]
+      area: [-8, -62, -8, 8, -62, 8]
+      difficulty: hard
+
+    - type: zombie_pigman
+      count: [1, 3]
+      area: [-13, -62, -13, 13, -62, 13]
+      difficulty: normal
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+
+  raw_cmds:
+    # Replace the entire floor with netherrack
+    - "fill -30 -63 -30 30 -63 30 netherrack"
+    # Soul sand patches
+    - "fill -10 -63 -10 -6 -63 -6 soul_sand"
+    - "fill 5 -63 5 9 -63 9 soul_sand"
+    # Soul fire on soul sand
+    - "setblock -8 -62 -8 soul_fire"
+    - "setblock 7 -62 7 soul_fire"
+    # Lava pool
+    - "fill -3 -63 -3 3 -63 3 lava"
+    # Nether brick pillars
+    - "fill -14 -63 -14 -14 -58 -14 nether_bricks"
+    - "fill 14 -63 -14 14 -58 -14 nether_bricks"
+    - "fill -14 -63 14 -14 -58 14 nether_bricks"
+    - "fill 14 -63 14 14 -58 14 nether_bricks"
+
+sim_state:
+  biomes: [nether_wastes, crimson_forest, soul_sand_valley]
+  y_range: [30, 50]
+  nearby_blocks: [netherrack, nether_quartz_ore, nether_gold_ore, soul_sand, soul_fire, lava, nether_bricks]
+  mob_count: 7
+  mob_pool: [wither_skeleton, blaze, zombified_piglin]
+  light_range: [3, 8]

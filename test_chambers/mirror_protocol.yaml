@@ -1,0 +1,201 @@
+# test_chambers/mirror_protocol.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# PUZZLE DESIGN — "Mirror Protocol"
+#
+# A single large chamber split into two symmetrical halves by a glass wall.
+# The player is in the LEFT wing. The RIGHT wing is an exact mirror — but locked,
+# with no direct access. Every action the player takes in the left wing must be
+# mentally mirrored to understand how the right wing will respond.
+#
+# PUZZLE SEQUENCE:
+#
+#  STEP 1 — "The Observer Chain" (left wing)
+#   The player stands on a stone pressure plate at the entrance.
+#   An observer block watches the plate. When activated it pulses a redstone
+#   chain that extends a piston in the left ceiling, dropping a sand block into
+#   a hopper below. The hopper feeds a comparator that outputs a signal only
+#   when it contains items — this holds a piston-gate open in the LEFT corridor.
+#   The right wing has an identical chain already pre-triggered (its sand is
+#   already in the hopper) so the right gate is already open — but unreachable.
+#   Teaching: cause-and-effect chains; observers fire ONCE on state change.
+#
+#  STEP 2 — "The Exchange" (central glass wall)
+#   A 3×3 panel of the glass wall has a single dropper pointed LEFT, loaded with
+#   a stone block. The player reaches the dropper access hole from the left corridor
+#   and triggers it with a button — the stone drops into the left wing.
+#   The stone block can now be carried and placed on the second pressure plate
+#   in the left wing (which the player can't stand on and reach the button at the
+#   same time). This second plate opens the final left-side iron door.
+#   Teaching: use items-as-weights for plates you can't occupy.
+#
+#  STEP 3 — "The Mirror Gate" (final)
+#   Beyond the left-side iron door is a shared antechamber with a glass floor
+#   looking down into a lava pool. Two pressure plates on opposite sides of the
+#   antechamber BOTH need to be active at once. One plate is on the left, one is
+#   on the right (right wing). The right plate has a villager trapped on it —
+#   it is permanently depressed. The player steps onto the left plate.
+#   Both active → final iron door opens → gateway.
+#   Teaching: observe the environment; sometimes the right side did the work
+#   already — you just needed to reach the left side of the equation.
+#
+# GOAL: reach the end_gateway in the terminal chamber.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: mirror_protocol
+description: "Mirrored two-wing chamber — observer chains, a dropper exchange, and a shared pressure gate"
+seed: 3141
+
+features:
+  biome: minecraft:deep_dark
+  time: night
+  weather: clear
+  difficulty: normal
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+    mobGriefing: "false"
+
+  raw_cmds:
+    # ── GLOBAL SHELL ──────────────────────────────────────────────────────────
+    - "fill -20 -62 -4 20 -56 36 air"
+    - "fill -20 -63 -4 20 -63 36 deepslate"
+    - "fill -20 -62 -4 20 -62 -4 deepslate"
+    - "fill -20 -62 36 20 -62 36 deepslate"
+    - "fill -20 -62 -4 -20 -62 36 deepslate"
+    - "fill 20 -62 -4 20 -62 36 deepslate"
+    - "fill -20 -56 -4 20 -56 36 deepslate"
+
+    # ── CENTRAL GLASS DIVIDER ─────────────────────────────────────────────────
+    # Full glass wall running north-south down the centre (x=0)
+    - "fill 0 -62 -4 0 -57 36 glass"
+    # One small viewing window at eye level so player can see the right wing
+    - "fill 0 -68 12 0 -65 18 air"
+
+    # ── LEFT WING — STEP 1: Observer Chain ───────────────────────────────────
+    # Floor and walls (left wing: x = -20 to -1)
+    - "fill -19 -62 0 -1 -62 28 smooth_stone"
+    - "fill -19 -57 0 -1 -57 28 smooth_stone"
+    - "fill -19 -62 0 -19 -57 28 smooth_stone"
+    - "fill -19 -62 0 -1 -57 0 smooth_stone"
+    - "fill -19 -62 28 -1 -57 28 smooth_stone"
+    # Entrance pressure plate
+    - "setblock -10 -62 2 stone_pressure_plate"
+    # Observer watching the pressure plate from below (pointing up)
+    - "setblock -10 -63 2 observer[facing=up]"
+    # Redstone dust connecting observer output upward to a piston above the plate
+    - "setblock -10 -63 3 redstone_wire"
+    - "setblock -10 -62 3 redstone_wire"
+    - "setblock -10 -69 3 redstone_wire"
+    # Piston in the ceiling above holding a sand block
+    - "setblock -10 -58 4 piston[facing=down]"
+    - "setblock -10 -57 4 sand"
+    # Hopper below piston catches the dropped sand
+    - "setblock -10 -60 4 hopper[facing=down]"
+    # Comparator reading the hopper — outputs signal to the left corridor gate
+    - "setblock -10 -62 5 hopper[facing=south]"
+    - "setblock -10 -62 6 comparator[facing=south]"
+    - "fill -10 -62 7 -10 -62 9 redstone_wire"
+    # Piston gate in the left corridor (blocks path until comparator fires)
+    - "setblock -10 -62 10 piston[facing=up]"
+    - "setblock -10 -69 10 smooth_stone"   # block that is pushed up to clear path
+    # Hint: orange wool arrow on floor pointing at the entrance plate
+    - "fill -11 -62 1 -9 -62 1 orange_wool"
+    - "setblock -10 -62 0 orange_wool"
+    # Lanterns for atmosphere
+    - "setblock -15 -59 5 lantern"
+    - "setblock -3 -59 5 lantern"
+
+    # ── RIGHT WING — pre-triggered mirror (Step 1 already solved) ────────────
+    # Floor and walls (right wing: x = 1 to 19)
+    - "fill 1 -62 0 19 -62 28 smooth_stone"
+    - "fill 1 -57 0 19 -57 28 smooth_stone"
+    - "fill 1 -62 0 19 -57 0 smooth_stone"
+    - "fill 19 -62 0 19 -57 28 smooth_stone"
+    - "fill 1 -62 28 19 -57 28 smooth_stone"
+    # Right wing entrance plate (already depressed by a stone block resting on it)
+    - "setblock 10 -62 2 stone_pressure_plate"
+    - "setblock 10 -69 2 stone"   # weight already placed — gate is pre-open
+    # Right wing piston gate already open (piston retracted, path clear)
+    # (we simply don't place the blocking stone here — right path is open)
+    # Right wing villager deep in the wing — visible through the glass window
+    - "summon villager 10 -69 16"
+    # Visual hint: the player can SEE the right wing is already solved
+    - "setblock 15 -59 5 lantern"
+    - "setblock 3 -59 5 lantern"
+
+    # ── LEFT WING — STEP 2: The Exchange ─────────────────────────────────────
+    # Dropper mounted IN the glass wall (x=0), facing left (west), loaded with stone
+    - "setblock 0 -68 15 dropper[facing=west]{Items:[{id:\"minecraft:stone\",Count:1b,Slot:4b}]}"
+    # Access hole in the glass wall around the dropper (player reaches button from left)
+    - "setblock -1 -68 15 air"
+    # Button on left side to trigger the dropper
+    - "setblock -1 -67 15 stone_button[face=wall,facing=east]"
+    # Stone drops into the left wing floor — player picks it up
+    # Second pressure plate in the left wing that needs the stone placed on it
+    - "setblock -10 -62 20 stone_pressure_plate"
+    # Hint sign near dropper
+    - "setblock -2 -67 14 oak_sign{Text1:\"{\\\"text\\\":\\\"USE THE\\\"}\",Text2:\"{\\\"text\\\":\\\"DROPPER\\\"}\"}"
+    # Redstone from second plate → opens second left iron door
+    - "fill -10 -62 21 -10 -62 25 redstone_wire"
+    - "setblock -10 -62 26 iron_door[facing=north,half=lower]"
+    - "setblock -10 -69 26 iron_door[facing=north,half=upper]"
+
+    # ── SHARED ANTECHAMBER — STEP 3: Mirror Gate ─────────────────────────────
+    # The antechamber sits beyond BOTH left and right wings at the north end
+    - "fill -10 -62 28 10 -57 35 air"
+    - "fill -10 -71 28 10 -71 35 glass"      # glass floor — lava visible below
+    - "fill -10 -72 28 10 -72 35 lava"       # lava pool for pressure
+    - "fill -10 -57 28 10 -57 35 smooth_stone"
+    - "fill -10 -62 28 -10 -57 35 smooth_stone"
+    - "fill 10 -62 28 10 -57 35 smooth_stone"
+    - "fill -10 -62 35 10 -62 35 smooth_stone"
+    - "fill -10 -57 35 10 -57 35 smooth_stone"
+    # Left pressure plate (player stands here)
+    - "setblock -6 -62 32 stone_pressure_plate"
+    # Right pressure plate (villager stands here — pre-activated)
+    - "setblock 6 -62 32 stone_pressure_plate"
+    # Villager trapped on the right plate
+    - "summon villager 6 -69 32"
+    # Iron fence around the right villager so it can't wander (keeps plate active)
+    - "fill 5 -62 31 7 -68 33 iron_bars hollow"
+    # AND gate: both plates active → final door opens
+    - "fill -6 -62 33 -6 -62 34 redstone_wire"
+    - "fill 6 -62 33 6 -62 34 redstone_wire"
+    - "fill -5 -62 34 5 -62 34 redstone_wire"
+    - "setblock 0 -62 34 redstone_wire"
+    - "setblock 0 -62 35 iron_door[facing=north,half=lower]"
+    - "setblock 0 -69 35 iron_door[facing=north,half=upper]"
+    # Atmospheric end rods flanking the antechamber
+    - "setblock -8 -60 32 end_rod"
+    - "setblock 8 -60 32 end_rod"
+    # Hint sign
+    - "setblock -1 -67 34 oak_sign{Text1:\"{\\\"text\\\":\\\"MIRROR\\\"}\",Text2:\"{\\\"text\\\":\\\"YOURSELF\\\"}\"}"
+
+    # ── TERMINAL ROOM — Gateway ───────────────────────────────────────────────
+    - "fill -4 -62 36 4 -57 42 air"
+    - "fill -4 -71 36 4 -71 42 end_stone"
+    - "fill -4 -57 36 4 -57 42 end_stone"
+    - "fill -4 -62 36 -4 -57 42 end_stone"
+    - "fill 4 -62 36 4 -57 42 end_stone"
+    - "fill -4 -62 42 4 -62 42 end_stone"
+    # Gateway pedestal
+    - "setblock 0 -62 39 chiseled_deepslate"
+    - "setblock 0 -69 39 chiseled_deepslate"
+    - "setblock 0 -68 39 end_gateway"
+    # Reward chest
+    - "setblock 2 -62 39 chest{Items:[{id:\"minecraft:diamond\",Count:5b,Slot:0b},{id:\"minecraft:experience_bottle\",Count:8b,Slot:1b},{id:\"minecraft:book\",Count:1b,Slot:2b}]}"
+    # End rods for dramatic finish
+    - "setblock -2 -65 39 end_rod"
+    - "setblock 2 -65 39 end_rod"
+    - "setblock 0 -65 37 end_rod"
+    - "setblock 0 -65 41 end_rod"
+
+sim_state:
+  biomes: [deep_dark]
+  y_range: [-50, -30]
+  nearby_blocks: [smooth_stone, deepslate, glass, observer, redstone_wire, hopper,
+                  comparator, piston, stone_pressure_plate, iron_door, dropper,
+                  iron_bars, lava, end_gateway, end_rod]
+  mob_count: 2
+  mob_pool: [villager]
+  light_range: [1, 7]

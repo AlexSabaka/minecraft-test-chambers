@@ -1,0 +1,46 @@
+# test_chambers/deep_dark_heist.yaml
+# Pitch-black vault run. The player is inflicted with Darkness and must carefully sneak 
+# past sculk sensors and a shrieker to grab high-tier loot without making a sound.
+
+name: deep_dark_heist
+description: "Silent heist in the Deep Dark — absolute darkness, sculk sensors, high-tier loot"
+seed: 9901
+
+features:
+  biome: minecraft:deep_dark
+  time: night
+  weather: clear
+  difficulty: hard
+
+  ores:
+    - type: diamond_ore
+      count: [0, 1]
+      area: [-5, -63, -5, 5, -63, 5]
+      vein_size: 1
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+
+  raw_cmds:
+    # Blind the player with the Darkness effect
+    - "effect give @a minecraft:darkness 10000 0 true"
+    # Establish a sculk infested floor
+    - "fill -8 -63 -8 8 -63 8 sculk"
+    - "fill -8 -64 -8 8 -64 8 deepslate"
+    # Central wool path to encourage sneaking/safe walking
+    - "fill -1 -63 2 1 -63 8 cyan_wool"
+    # The prize pedestal
+    - "setblock 0 -62 0 chiseled_deepslate"
+    - "setblock 0 -61 0 chest{Items:[{id:\"minecraft:enchanted_golden_apple\",Count:1b,Slot:4b}, {id:\"minecraft:echo_shard\",Count:3b,Slot:5b}]}"
+    # The alarms (sensors and shriekers)
+    - "setblock 3 -62 0 sculk_sensor"
+    - "setblock -3 -62 0 sculk_sensor"
+    - "setblock 0 -62 -3 sculk_shrieker{can_summon:true}"
+
+sim_state:
+  biomes: [deep_dark, lush_caves, dripstone_caves]
+  y_range: [-50, -10]
+  nearby_blocks: [sculk, sculk_vein, sculk_sensor, sculk_shrieker, deepslate, cyan_wool]
+  mob_count: 0
+  mob_pool: [warden]
+  light_range: [0, 2]

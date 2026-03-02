@@ -1,0 +1,10 @@
+# ─── Server gamerules (set once on server start) ──────────────────────────────
+default_gamerules:
+  doMobSpawning:   "false"
+  keepInventory:   "true"
+  doDaylightCycle: "false"
+  doWeatherCycle:  "false"
+  doFireTick:      "false"
+  mobGriefing:     "false"
+
+worldborder: 64

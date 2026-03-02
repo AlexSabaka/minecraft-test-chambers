@@ -1,0 +1,29 @@
+[project]
+name = "minecraft-test-chambers"
+version = "0.1.0"
+description = "Minecraft Portal-inspired test chamber generator"
+requires-python = ">=3.10"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+]
+recorder = [
+    "anthropic>=0.25",
+]
+
+[tool.setuptools.packages.find]
+include = ["minecraft_test_chambers*", "minecraft_recorder*"]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

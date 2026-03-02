@@ -1,0 +1,94 @@
+# test_chambers/mineshaft_collapse.yaml
+# A section of abandoned mineshaft has partially caved in, trapping the player.
+# Gravel cascade blocks the main tunnel. Cave spiders lurk behind cobwebs.
+# Goal: dig through gravel cave-ins, neutralise the spider nest, and reach the
+# mine cart chest with enough iron to craft a way out.
+
+name: mineshaft_collapse
+description: "Collapsed mineshaft — gravel cave-ins, spider nests, find the exit and the loot cart"
+seed: 8471
+
+features:
+  biome: minecraft:dripstone_caves
+  time: night
+  weather: clear
+  difficulty: normal
+
+  ores:
+    - type: deepslate_iron_ore
+      count: [4, 7]
+      area: [-12, -63, -12, 12, -61, 12]
+      vein_size: 2
+
+    - type: deepslate_coal_ore
+      count: [5, 9]
+      area: [-14, -63, -14, 14, -61, 14]
+      vein_size: 3
+
+    - type: deepslate_gold_ore
+      count: [1, 2]
+      area: [-6, -63, -6, 6, -61, 6]
+      vein_size: 1
+
+  mobs:
+    - type: cave_spider
+      count: [3, 5]
+      area: [-8, -62, 4, 8, -62, 14]
+      difficulty: normal
+
+    - type: spider
+      count: [1, 2]
+      area: [-10, -62, -10, 10, -62, -4]
+      difficulty: normal
+
+    - type: zombie
+      count: [1, 2]
+      area: [-12, -62, -12, 12, -62, 0]
+      difficulty: normal
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+
+  raw_cmds:
+    # Mineshaft floor of planks and dirt
+    - "fill -14 -64 -14 14 -64 14 dirt"
+    - "fill -2 -64 -14 2 -64 14 oak_planks"
+    # Tunnel walls — supported sections
+    - "fill -14 -63 -14 14 -63 -10 stone"
+    - "fill -14 -63 10 14 -63 14 stone"
+    - "fill -14 -63 -14 -10 -63 14 stone"
+    - "fill 10 -63 -14 14 -63 14 stone"
+    # Oak plank ceiling for tunnel segments
+    - "fill -2 -61 -14 2 -61 14 oak_planks"
+    # First cave-in — gravel wall across the north tunnel
+    - "fill -3 -63 -8 3 -61 -8 gravel"
+    - "fill -2 -63 -9 2 -62 -9 gravel"
+    # Second cave-in — partial gravel pile blocking the east branch
+    - "fill 6 -63 -3 10 -62 3 gravel"
+    # Cobweb nest in the south end — spider spawner area
+    - "fill -5 -62 8 5 -62 14 cobweb"
+    - "setblock 0 -62 10 spawner{SpawnData:{entity:{id:\"minecraft:cave_spider\"}}}"
+    # Minecart chests at the dead-end corridors
+    - "setblock -10 -63 0 chest_minecart{Items:[{id:\"minecraft:iron_ingot\",Count:12b,Slot:0b},{id:\"minecraft:wooden_pickaxe\",Count:1b,Slot:1b},{id:\"minecraft:torch\",Count:16b,Slot:2b},{id:\"minecraft:bread\",Count:4b,Slot:3b}]}"
+    - "setblock 0 -63 -12 chest_minecart{Items:[{id:\"minecraft:gold_ingot\",Count:4b,Slot:0b},{id:\"minecraft:name_tag\",Count:1b,Slot:1b}]}"
+    # Torches — sparse and uneven to create pools of dark
+    - "setblock -1 -62 -6 torch"
+    - "setblock 1 -62 6 torch"
+    - "setblock -1 -62 0 torch"
+    # Rails along the main corridor
+    - "fill -1 -63 -12 1 -63 12 rail"
+    # Broken fence post supports (atmosphere)
+    - "setblock -2 -63 -4 oak_fence"
+    - "setblock 2 -63 -4 oak_fence"
+    - "setblock -2 -63 4 oak_fence"
+    - "setblock 2 -63 4 oak_fence"
+    - "setblock -2 -63 -4 oak_planks"
+
+sim_state:
+  biomes: [dripstone_caves, deep_dark]
+  y_range: [0, 30]
+  nearby_blocks: [gravel, cobweb, oak_planks, rail, stone, dirt, deepslate_iron_ore,
+                  deepslate_coal_ore, torch, oak_fence]
+  mob_count: 7
+  mob_pool: [cave_spider, spider, zombie]
+  light_range: [0, 6]

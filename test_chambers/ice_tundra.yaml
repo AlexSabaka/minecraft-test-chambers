@@ -1,0 +1,62 @@
+# test_chambers/ice_tundra.yaml
+# Frozen wasteland in a blizzard — everything is ice and snow, strays hunt in the dark.
+# Tests agent behaviour under harsh visibility and movement penalties.
+
+name: ice_tundra
+description: "Frozen tundra in a thunderstorm at night — strays, packed ice, survival pressure"
+seed: 144
+
+features:
+  biome: minecraft:snowy_plains
+  time: midnight
+  weather: thunder
+  difficulty: hard
+
+  ores:
+    - type: coal_ore
+      count: [2, 4]
+      area: [-12, -63, -12, 12, -63, 12]
+      replace: snow_block
+
+    - type: iron_ore
+      count: [1, 3]
+      area: [-10, -63, -10, 10, -63, 10]
+      replace: snow_block
+
+  mobs:
+    - type: stray
+      count: [2, 4]
+      area: [-13, -62, -13, 13, -62, 13]
+      difficulty: hard
+
+    - type: skeleton
+      count: [1, 2]
+      area: [-10, -62, -10, 10, -62, 10]
+      difficulty: hard
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+
+  raw_cmds:
+    # Blanket the ground with snow
+    - "fill -30 -63 -30 30 -63 30 snow_block"
+    # Packed ice slabs and columns for terrain variety
+    - "fill -8 -63 -8 -4 -63 -4 packed_ice"
+    - "fill 3 -63 5 7 -63 9 packed_ice"
+    - "setblock -10 -62 2 blue_ice"
+    - "setblock 9 -62 -7 blue_ice"
+    # A few snow piles (snow layers)
+    - "fill -15 -62 -15 15 -62 15 snow"
+    # Ice stalagmites
+    - "setblock -5 -62 -10 ice"
+    - "setblock -5 -61 -10 ice"
+    - "setblock 6 -62 8 ice"
+    - "setblock 6 -61 8 ice"
+
+sim_state:
+  biomes: [snowy_plains, ice_spikes, frozen_peaks, snowy_taiga]
+  y_range: [58, 72]
+  nearby_blocks: [snow_block, packed_ice, blue_ice, ice, coal_ore, iron_ore, gravel]
+  mob_count: 5
+  mob_pool: [stray, skeleton]
+  light_range: [0, 4]

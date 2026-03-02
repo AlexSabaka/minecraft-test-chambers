@@ -1,0 +1,79 @@
+# test_chambers/nether_fortress_raid.yaml
+# The player spawns in the Nether at the entrance of a blaze-infested fortress.
+# Goal: fight through wither skeletons, kill a blaze spawner cluster, and loot
+# the nether wart farm. Fire resistance is not given — one wrong step into lava is lethal.
+
+name: nether_fortress_raid
+description: "Nether fortress siege — blaze spawners, wither skeletons, nether wart loot"
+seed: 1337
+
+features:
+  biome: minecraft:nether_wastes
+  time: night
+  weather: clear
+  difficulty: hard
+
+  ores:
+    - type: nether_quartz_ore
+      count: [3, 6]
+      area: [-12, -63, -12, 12, -60, 12]
+      vein_size: 2
+
+    - type: nether_gold_ore
+      count: [2, 4]
+      area: [-10, -63, -10, 10, -60, 10]
+      vein_size: 1
+
+  mobs:
+    - type: blaze
+      count: [2, 4]
+      area: [-10, -62, -10, 10, -62, 10]
+      difficulty: hard
+
+    - type: wither_skeleton
+      count: [2, 3]
+      area: [-13, -62, -13, 13, -62, 13]
+      difficulty: hard
+
+    - type: zombified_piglin
+      count: [1, 2]
+      area: [-14, -62, -14, 14, -62, 14]
+      difficulty: normal
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+
+  raw_cmds:
+    # Nether brick fortress floor and walls
+    - "fill -15 -64 -15 15 -64 15 nether_bricks"
+    - "fill -15 -63 -15 15 -63 -10 nether_bricks"
+    - "fill -15 -63 10 15 -63 15 nether_bricks"
+    - "fill -15 -63 -15 -10 -63 15 nether_bricks"
+    - "fill 10 -63 -15 15 -63 15 nether_bricks"
+    # Corridor of nether brick fences (classic fortress feel)
+    - "fill -2 -62 -14 2 -58 -14 nether_brick_fence"
+    - "fill -2 -62 14 2 -58 14 nether_brick_fence"
+    # Lava hazard pits flanking the central path
+    - "fill -14 -63 -4 -11 -63 4 lava"
+    - "fill 11 -63 -4 14 -63 4 lava"
+    # Central blaze spawner cage
+    - "setblock 0 -62 0 spawner{SpawnData:{entity:{id:\"minecraft:blaze\"}}}"
+    - "fill -2 -63 -2 2 -60 2 nether_brick_fence hollow"
+    # Nether wart farm on soul sand — the real prize
+    - "fill -5 -63 8 5 -63 12 soul_sand"
+    - "fill -5 -62 8 5 -62 12 nether_wart"
+    # Loot chest behind the wart farm
+    - "setblock 0 -62 13 chest{Items:[{id:\"minecraft:blaze_rod\",Count:4b,Slot:0b},{id:\"minecraft:ghast_tear\",Count:2b,Slot:1b},{id:\"minecraft:golden_chestplate\",Count:1b,Slot:2b}]}"
+    # Ceiling fire patches for atmosphere
+    - "setblock -6 -59 -6 fire"
+    - "setblock 7 -59 3 fire"
+    - "setblock -4 -59 9 fire"
+
+sim_state:
+  biomes: [nether_wastes, soul_sand_valley, crimson_forest]
+  y_range: [40, 70]
+  nearby_blocks: [nether_bricks, nether_brick_fence, soul_sand, nether_wart, lava,
+                  nether_quartz_ore, nether_gold_ore, fire, basalt]
+  mob_count: 8
+  mob_pool: [blaze, wither_skeleton, zombified_piglin]
+  light_range: [3, 9]

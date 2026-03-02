@@ -1,0 +1,198 @@
+# test_chambers/aperture_relay.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# PUZZLE DESIGN — "Aperture Relay"
+#
+# Three sequential sub-rooms, each teaching a new mechanic. The gateway sits
+# behind the final iron door. No mobs, no combat — pure environmental logic.
+#
+# ROOM 1 — "The Drop"
+#   A gravel column hangs directly above a stone pressure plate.
+#   The iron door ahead only opens while the plate is held down.
+#   Solution: break the bottom gravel block → the column falls → plate stays
+#   depressed permanently → door opens.
+#   Teaching: blocks can substitute for a player on a pressure plate.
+#
+# ROOM 2 — "The Gap"
+#   A four-block lava chasm. Three sticky pistons are embedded in the near wall,
+#   facing horizontally. A button on the near side extends them for ~1.5 s —
+#   just long enough to sprint across if you react immediately.
+#   A lever on the far wall locks the pistons OUT permanently once you're across,
+#   so there's no going back.
+#   Teaching: timed traversal; commit to the crossing.
+#
+# ROOM 3 — "The Pair"
+#   Two stone pressure plates must be held simultaneously to open the final door.
+#   One plate sits in plain view. The other is behind a half-wall.
+#   A zombie is sealed in a 1×1 glass cage directly above the second plate with
+#   a one-block drop. Breaking the glass pane on the cage floor drops the zombie
+#   onto the plate. The player stands on the first. Both depressed → door opens.
+#   Teaching: use a mob as a persistent weight.
+#
+# GOAL: reach the end_gateway beacon in the terminal room beyond the final door.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: aperture_relay
+description: "Three-room puzzle relay — falling blocks, timed piston bridge, and a caged zombie"
+seed: 2049
+
+features:
+  biome: minecraft:deep_dark
+  time: night
+  weather: clear
+  difficulty: normal
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+    mobGriefing: "false"
+
+  raw_cmds:
+    # ── GLOBAL SHELL ──────────────────────────────────────────────────────────
+    # Outer walls and ceiling — sealed deepslate box with no natural exits
+    - "fill -18 -62 -2 18 -56 30 air"
+    - "fill -18 -61 -2 18 -61 30 deepslate"
+    - "fill -18 -62 -2 18 -62 -2 deepslate"
+    - "fill -18 -62 30 18 -62 30 deepslate"
+    - "fill -18 -62 -2 -18 -62 30 deepslate"
+    - "fill 18 -62 -2 18 -62 30 deepslate"
+    - "fill -18 -56 -2 18 -56 30 deepslate"
+
+    # ── ROOM 1 — "The Drop" ───────────────────────────────────────────────────
+    # Room shell
+    - "fill -6 -62 0 6 -57 12 air"
+    - "fill -6 -61 0 6 -61 12 smooth_stone"
+    - "fill -6 -57 0 6 -57 12 smooth_stone"
+    - "fill -6 -62 0 -6 -57 12 smooth_stone"
+    - "fill 6 -62 0 6 -57 12 smooth_stone"
+    - "fill -6 -62 0 6 -57 0 smooth_stone"
+    # Atmospheric lighting — dim wall lanterns
+    - "setblock -5 -60 2 lantern"
+    - "setblock 5 -60 2 lantern"
+    - "setblock -5 -60 10 lantern"
+    - "setblock 5 -60 10 lantern"
+    # Pressure plate in the floor
+    - "setblock 0 -62 8 stone_pressure_plate"
+    # Gravel column hanging above the plate (4 tall — stable until base is broken)
+    - "setblock 0 -66 8 gravel"
+    - "setblock 0 -65 8 gravel"
+    - "setblock 0 -64 8 gravel"
+    - "setblock 0 -63 8 gravel"
+    # Visual hint: orange wool arrow on the floor pointing AT the gravel base
+    - "setblock -1 -62 7 orange_wool"
+    - "setblock 0 -62 7 orange_wool"
+    - "setblock 1 -62 7 orange_wool"
+    - "setblock 0 -62 6 orange_wool"
+    # Iron door (opens north into Room 2, needs plate held)
+    - "setblock 0 -62 11 iron_door[facing=north,half=lower]"
+    - "setblock 0 -66 11 iron_door[facing=north,half=upper]"
+    # Redstone dust connecting plate to door
+    - "fill 0 -62 8 0 -62 11 redstone_wire"
+
+    # ── ROOM 2 — "The Gap" ────────────────────────────────────────────────────
+    # Room shell
+    - "fill -6 -62 12 6 -57 24 air"
+    - "fill -6 -61 12 6 -61 24 smooth_stone"
+    - "fill -6 -57 12 6 -57 24 smooth_stone"
+    - "fill -6 -62 12 -6 -57 24 smooth_stone"
+    - "fill 6 -62 12 6 -57 24 smooth_stone"
+    - "fill -6 -62 24 6 -57 24 smooth_stone"
+    # Lava chasm (4 blocks wide) in the center of this room
+    - "fill -5 -61 16 5 -61 19 lava"
+    - "fill -5 -62 16 5 -62 19 air"
+    # Near ledge (z=12 to z=15)
+    - "fill -5 -62 12 5 -62 15 smooth_stone"
+    # Far ledge (z=20 to z=24)
+    - "fill -5 -62 20 5 -62 24 smooth_stone"
+    # Piston bridge in west wall — 3 sticky pistons pointing east, stacked at floor level
+    # They extend to cover z=16, z=17, z=18 when activated
+    - "setblock -6 -62 16 sticky_piston[facing=east]"
+    - "setblock -6 -62 17 sticky_piston[facing=east]"
+    - "setblock -6 -62 18 sticky_piston[facing=east]"
+    # Trigger button on near-side wall (timed — player must sprint immediately)
+    - "setblock -5 -66 15 stone_button[face=wall,facing=east]"
+    # Redstone connecting button → pistons (through the west wall)
+    - "setblock -7 -62 16 redstone_wire"
+    - "setblock -7 -62 17 redstone_wire"
+    - "setblock -7 -62 18 redstone_wire"
+    - "setblock -7 -62 15 redstone_wire"
+    - "setblock -6 -62 15 redstone_wire"
+    # Lock lever on far side — player pulls it to permanently extend pistons
+    # (gives them the option to not need the timed bridge on future runs)
+    - "setblock 5 -66 21 lever[face=wall,facing=west]"
+    # Iron door leading to Room 3
+    - "setblock 0 -62 23 iron_door[facing=north,half=lower]"
+    - "setblock 0 -66 23 iron_door[facing=north,half=upper]"
+    # Hint sign above the button
+    - "setblock -5 -65 15 oak_sign{Text1:\"{\\\"text\\\":\\\"PRESS &\\\"}\",Text2:\"{\\\"text\\\":\\\"SPRINT NOW\\\"}\"}"
+    # Atmospheric lighting
+    - "setblock -5 -60 14 lantern"
+    - "setblock 5 -60 22 lantern"
+
+    # ── ROOM 3 — "The Pair" ───────────────────────────────────────────────────
+    # Room shell
+    - "fill -6 -62 25 6 -57 38 air"
+    - "fill -6 -61 25 6 -61 38 smooth_stone"
+    - "fill -6 -57 25 6 -57 38 smooth_stone"
+    - "fill -6 -62 25 -6 -57 38 smooth_stone"
+    - "fill 6 -62 25 6 -57 38 smooth_stone"
+    - "fill -6 -62 38 6 -57 38 smooth_stone"
+    # Half-wall dividing the room (the second plate hides behind it)
+    - "fill -4 -62 31 4 -65 31 smooth_stone_slab"
+    # Player plate — visible in plain sight in front of the half-wall
+    - "setblock -2 -62 30 stone_pressure_plate"
+    # Zombie cage — glass box on top of the half-wall with zombie inside
+    # The zombie stands on a glass pane floor; breaking it drops zombie onto plate
+    - "fill -1 -64 32 1 -62 34 glass hollow"
+    - "setblock 0 -64 33 glass_pane"   # cage floor — this is what the player breaks
+    # Zombie pre-placed inside the cage
+    - "summon zombie 0 -63 33"
+    # Second pressure plate directly below the cage floor
+    - "setblock 0 -65 33 stone_pressure_plate"
+    # Hint: a blue wool X on the floor below the cage, visible from the player plate
+    - "setblock -1 -62 33 blue_wool"
+    - "setblock 0 -62 33 blue_wool"
+    - "setblock 1 -62 33 blue_wool"
+    # Redstone logic: BOTH plates must be active (AND gate via comparators)
+    # Plate 1 → comparator A
+    - "setblock -2 -62 29 redstone_wire"
+    - "setblock -1 -62 29 redstone_comparator[facing=south,mode=subtract]"
+    # Plate 2 → comparator B
+    - "setblock 0 -66 33 redstone_wire"
+    - "setblock 0 -62 34 redstone_comparator[facing=north]"
+    # Both comparators feed into a common line → iron door
+    - "fill -1 -62 28 1 -62 28 redstone_wire"
+    - "fill -1 -62 27 1 -62 27 redstone_wire"
+    - "setblock 0 -62 36 iron_door[facing=north,half=lower]"
+    - "setblock 0 -66 36 iron_door[facing=north,half=upper]"
+    # Hint sign near the zombie cage
+    - "setblock 2 -64 33 oak_sign{Text1:\"{\\\"text\\\":\\\"BREAK THE\\\"}\",Text2:\"{\\\"text\\\":\\\"FLOOR\\\"}\"}"
+    # Atmospheric lighting
+    - "setblock -5 -60 27 lantern"
+    - "setblock 5 -60 35 lantern"
+
+    # ── TERMINAL ROOM — Gateway ───────────────────────────────────────────────
+    # Small reward room beyond the final door
+    - "fill -4 -62 38 4 -57 42 air"
+    - "fill -4 -61 38 4 -61 42 end_stone"
+    - "fill -4 -57 38 4 -57 42 end_stone"
+    - "fill -4 -62 38 -4 -57 42 end_stone"
+    - "fill 4 -62 38 4 -57 42 end_stone"
+    - "fill -4 -62 42 4 -57 42 end_stone"
+    # The goal — gateway beacon on a pedestal
+    - "setblock 0 -62 40 chiseled_deepslate"
+    - "setblock 0 -66 40 chiseled_deepslate"
+    - "setblock 0 -65 40 end_gateway"
+    # Reward chest beside it
+    - "setblock 2 -62 40 chest{Items:[{id:\"minecraft:diamond\",Count:3b,Slot:0b},{id:\"minecraft:ender_pearl\",Count:4b,Slot:1b},{id:\"minecraft:enchanted_book\",Count:1b,Slot:2b}]}"
+    # Ambient end rods for dramatic lighting
+    - "setblock -2 -64 40 end_rod"
+    - "setblock 2 -64 40 end_rod"
+    - "setblock 0 -64 38 end_rod"
+
+sim_state:
+  biomes: [deep_dark, dripstone_caves]
+  y_range: [-30, -10]
+  nearby_blocks: [smooth_stone, deepslate, gravel, stone_pressure_plate, iron_door,
+                  redstone_wire, sticky_piston, glass, lava, lantern, end_gateway]
+  mob_count: 1
+  mob_pool: [zombie]
+  light_range: [2, 8]

@@ -1,0 +1,72 @@
+# test_chambers/volcano_escape.yaml
+# The player spawns in a volcanic caldera. Diamonds are buried in obsidian pillars —
+# but lava is slowly flooding the floor. Mine fast, climb the ash columns, and escape
+# before the ground becomes impassable. No mobs, pure environmental pressure.
+
+name: volcano_escape
+description: "Volcanic caldera flooding with lava — mine diamonds fast and reach the top"
+seed: 5150
+
+features:
+  biome: minecraft:basalt_deltas
+  time: night
+  weather: clear
+  difficulty: hard
+
+  ores:
+    - type: diamond_ore
+      count: [3, 5]
+      area: [-6, -63, -6, 6, -63, 6]
+      vein_size: 1
+
+    - type: coal_ore
+      count: [4, 7]
+      area: [-10, -63, -10, 10, -60, 10]
+      vein_size: 2
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+
+  raw_cmds:
+    # Basalt/blackstone caldera floor
+    - "fill -16 -64 -16 16 -64 16 blackstone"
+    - "fill -16 -63 -16 16 -63 16 basalt"
+    # Obsidian pillars encasing the diamonds — player must mine through
+    - "fill -3 -63 -3 3 -57 3 obsidian hollow"
+    - "fill -1 -62 -1 1 -62 1 obsidian"
+    # Magma block floor ring — stepping on it hurts without fire resistance
+    - "fill -10 -63 -10 10 -63 -7 magma_block"
+    - "fill -10 -63 7 10 -63 10 magma_block"
+    - "fill -10 -63 -6 -7 -63 6 magma_block"
+    - "fill 7 -63 -6 10 -63 6 magma_block"
+    # Ash columns — natural climbing route upward
+    - "fill -14 -63 0 -14 -56 0 basalt"
+    - "fill 14 -63 0 14 -56 0 basalt"
+    - "fill 0 -63 14 0 -56 14 basalt"
+    - "fill 0 -63 -14 0 -56 -14 basalt"
+    # Lava eruption cracks — visual hazard edges
+    - "fill -16 -63 -16 -13 -63 -13 lava"
+    - "fill 13 -63 -16 16 -63 -13 lava"
+    - "fill -16 -63 13 -13 -63 16 lava"
+    - "fill 13 -63 13 16 -63 16 lava"
+    # Timed lava flood: places lava at floor level around the inner ring
+    # (in a real implementation this would tick; here it seeds the edge)
+    - "fill -12 -63 -12 12 -63 -11 lava"
+    - "fill -12 -63 11 12 -63 12 lava"
+    - "fill -12 -63 -10 -11 -63 10 lava"
+    - "fill 11 -63 -10 12 -63 10 lava"
+    # Escape ledge at the top — safe cobblestone platform with chest
+    - "fill -4 -54 -4 4 -54 4 cobblestone"
+    - "setblock 0 -53 0 chest{Items:[{id:\"minecraft:ender_pearl\",Count:4b,Slot:0b},{id:\"minecraft:fire_resistance\",Count:2b,Slot:1b}]}"
+    # Fire for ambiance
+    - "setblock -5 -62 0 fire"
+    - "setblock 5 -62 0 fire"
+    - "setblock 0 -62 5 fire"
+
+sim_state:
+  biomes: [basalt_deltas, nether_wastes]
+  y_range: [30, 60]
+  nearby_blocks: [basalt, blackstone, obsidian, magma_block, lava, coal_ore, diamond_ore, fire]
+  mob_count: 0
+  mob_pool: []
+  light_range: [4, 11]

@@ -1,0 +1,54 @@
+# test_chambers/deep_mine.yaml
+# Deep underground mining environment.
+# Places ore veins around spawn point at low y-levels.
+# Designed for mining scenarios where the agent digs for resources.
+
+name: deep_mine
+description: "Underground cave with iron, coal, gold and diamond ore veins"
+seed: 202
+
+features:
+  biome: minecraft:dripstone_caves
+  time: night
+  weather: clear
+  difficulty: normal
+
+  ores:
+    - type: deepslate_coal_ore
+      count: [4, 8]
+      area: [-8, -63, -8, 8, -61, 8]
+      vein_size: 3
+
+    - type: deepslate_iron_ore
+      count: [3, 6]
+      area: [-8, -63, -8, 8, -61, 8]
+      vein_size: 2
+
+    - type: deepslate_gold_ore
+      count: [1, 3]
+      area: [-6, -63, -6, 6, -61, 6]
+      vein_size: 1
+
+    - type: deepslate_diamond_ore
+      count: [1, 2]
+      area: [-4, -63, -4, 4, -61, 4]
+      vein_size: 0
+
+    - type: deepslate_lapis_ore
+      count: [1, 2]
+      area: [-6, -63, -6, 6, -61, 6]
+      vein_size: 1
+
+  raw_cmds:
+    - "fill -8 -63 -8 8 -63 8 deepslate replace grass_block"
+    - "fill -8 -63 -8 8 -63 8 deepslate replace dirt"
+    - "gamerule doMobSpawning false"
+
+sim_state:
+  biomes: [dripstone_caves, deep_dark]
+  y_range: [10, 40]
+  nearby_blocks: [deepslate, deepslate_iron_ore, deepslate_coal_ore,
+                  deepslate_gold_ore, deepslate_diamond_ore, deepslate_lapis_ore, gravel]
+  mob_count: 0
+  mob_pool: []
+  light_range: [0, 4]

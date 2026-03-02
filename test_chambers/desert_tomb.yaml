@@ -1,0 +1,51 @@
+# test_chambers/desert_tomb.yaml
+# A sweltering desert environment featuring a hidden tomb.
+# The player must navigate husks and a hidden TNT trap to claim the golden treasure.
+
+name: desert_tomb
+description: "Scorching desert sands hiding an ancient tomb — trapped loot, hostile husks"
+seed: 1042
+
+features:
+  biome: minecraft:desert
+  time: day
+  weather: clear
+  difficulty: normal
+
+  ores:
+    - type: gold_ore
+      count: [1, 2]
+      area: [-8, -63, -8, 8, -63, 8]
+      vein_size: 2
+
+  mobs:
+    - type: husk
+      count: [2, 4]
+      area: [-10, -62, -10, 10, -62, 10]
+      difficulty: normal
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+
+  raw_cmds:
+    # Build an ancient sandstone tomb
+    - "fill -4 -63 -4 4 -59 4 cut_sandstone hollow"
+    - "fill -3 -63 -3 3 -63 3 sand"
+    # Entrances
+    - "setblock 0 -62 4 air"
+    - "setblock 0 -61 4 air"
+    # The trap and the loot
+    - "setblock 0 -64 0 tnt"
+    - "setblock 0 -63 0 sand"
+    - "setblock 0 -62 0 trapped_chest{Items:[{id:\"minecraft:golden_apple\",Count:1b,Slot:13b}, {id:\"minecraft:gold_ingot\",Count:4b,Slot:14b}]}"
+    # Decor
+    - "setblock -3 -62 -3 chiseled_sandstone"
+    - "setblock 3 -62 3 chiseled_sandstone"
+
+sim_state:
+  biomes: [desert, badlands, savanna]
+  y_range: [55, 75]
+  nearby_blocks: [sand, sandstone, cut_sandstone, dead_bush, cactus, gold_ore]
+  mob_count: 3
+  mob_pool: [husk]
+  light_range: [12, 15]

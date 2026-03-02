@@ -1,0 +1,85 @@
+# test_chambers/mansion_ambush.yaml
+# The player wakes inside a woodland mansion's grand hall, stripped of weapons.
+# Vindicators patrol the corridors. An evoker holds the Totem of Undying and won't
+# give it up easily. The vexes it summons will phase through walls.
+# Goal: kill the evoker, recover the totem, escape through the front door.
+
+name: mansion_ambush
+description: "Woodland mansion ambush — survive evoker's vexes and vindicators to claim the totem"
+seed: 6660
+
+features:
+  biome: minecraft:dark_forest
+  time: night
+  weather: clear
+  difficulty: hard
+
+  mobs:
+    - type: vindicator
+      count: [3, 5]
+      area: [-14, -62, -14, 14, -62, 14]
+      difficulty: hard
+
+    - type: evoker
+      count: [1, 1]
+      area: [-3, -62, -3, 3, -62, 3]
+      difficulty: hard
+
+    - type: vex
+      count: [2, 4]
+      area: [-10, -62, -10, 10, -60, 10]
+      difficulty: hard
+
+    - type: allium
+      count: [0, 0]
+      area: [0, 0, 0, 0, 0, 0]
+
+  gamerule_overrides:
+    doMobSpawning: "false"
+
+  raw_cmds:
+    # Mansion dark oak floor and walls
+    - "fill -16 -64 -16 16 -64 16 dark_oak_planks"
+    - "fill -16 -63 -16 16 -63 -12 dark_oak_planks"
+    - "fill -16 -63 12 16 -63 16 dark_oak_planks"
+    - "fill -16 -63 -16 -12 -63 16 dark_oak_planks"
+    - "fill 12 -63 -16 16 -63 16 dark_oak_planks"
+    # Grand hall floor — birch wood contrast panels
+    - "fill -8 -63 -8 8 -63 8 birch_planks"
+    - "fill -4 -63 -4 4 -63 4 dark_oak_planks"
+    # Pillar columns
+    - "fill -8 -63 -8 -8 -58 -8 dark_oak_log"
+    - "fill 8 -63 -8 8 -58 -8 dark_oak_log"
+    - "fill -8 -63 8 -8 -58 8 dark_oak_log"
+    - "fill 8 -63 8 8 -58 8 dark_oak_log"
+    # Ceiling (tall room — enough vertical space for vex flight)
+    - "fill -16 -57 -16 16 -57 16 dark_oak_planks"
+    # Grey carpet runner down the central hallway
+    - "fill -1 -63 -14 1 -63 14 gray_carpet"
+    # Cobweb-draped corners
+    - "fill -15 -62 -15 -13 -62 -13 cobweb"
+    - "fill 13 -62 -15 15 -62 -13 cobweb"
+    - "fill -15 -62 13 -13 -62 15 cobweb"
+    # Evoker's altar — chest holds the totem IF the evoker is killed
+    # (in a real run the evoker drops it; this is a fallback)
+    - "setblock 0 -62 -12 chiseled_stone_bricks"
+    - "setblock 0 -61 -12 chest{Items:[{id:\"minecraft:totem_of_undying\",Count:1b,Slot:4b}]}"
+    # Lanterns instead of torches for dim, oppressive light
+    - "setblock -6 -58 0 lantern[hanging=true]"
+    - "setblock 6 -58 0 lantern[hanging=true]"
+    - "setblock 0 -58 -6 lantern[hanging=true]"
+    - "setblock 0 -58 6 lantern[hanging=true]"
+    # The "front door" escape corridor leading north
+    - "fill -2 -63 14 2 -60 16 air"
+    - "fill -2 -64 14 2 -64 16 dark_oak_planks"
+    # Loot stash for the player — axe and shield hidden in a side room
+    - "setblock -14 -62 0 barrel{Items:[{id:\"minecraft:iron_axe\",Count:1b,Slot:0b},{id:\"minecraft:shield\",Count:1b,Slot:1b},{id:\"minecraft:bread\",Count:6b,Slot:2b}]}"
+
+sim_state:
+  biomes: [dark_forest]
+  y_range: [60, 80]
+  nearby_blocks: [dark_oak_planks, dark_oak_log, birch_planks, gray_carpet, cobweb,
+                  lantern, chiseled_stone_bricks, barrel]
+  mob_count: 9
+  mob_pool: [vindicator, evoker, vex]
+  light_range: [2, 7]
