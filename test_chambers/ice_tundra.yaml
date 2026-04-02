@@ -4,7 +4,6 @@
 
 name: ice_tundra
 description: "Frozen tundra in a thunderstorm at night — strays, packed ice, survival pressure"
-seed: 144
 
 features:
   biome: minecraft:snowy_plains
@@ -34,6 +33,13 @@ features:
       area: [-10, -62, -10, 10, -62, 10]
       difficulty: hard
 
+  inventory:
+    mainhand: stone_sword
+    items:
+      stone_sword: 1
+      torch: 8
+      cooked_beef: 4
+
   gamerule_overrides:
     doMobSpawning: "false"
 
@@ -52,11 +58,3 @@ features:
     - "setblock -5 -61 -10 ice"
     - "setblock 6 -62 8 ice"
     - "setblock 6 -61 8 ice"
-
-sim_state:
-  biomes: [snowy_plains, ice_spikes, frozen_peaks, snowy_taiga]
-  y_range: [58, 72]
-  nearby_blocks: [snow_block, packed_ice, blue_ice, ice, coal_ore, iron_ore, gravel]
-  mob_count: 5
-  mob_pool: [stray, skeleton]
-  light_range: [0, 4]

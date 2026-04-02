@@ -7,6 +7,7 @@ Public surface:
     from minecraft_recorder.action_classifier import ActionClassifier, ActionEvent
     from minecraft_recorder.episode_writer import EpisodeWriter
     from minecraft_recorder.reasoning_injector import inject_reasoning
+    from minecraft_recorder.screenshot_capture import ScreenshotSyncer, merge_visual
 """
 from __future__ import annotations
 

@@ -12,7 +12,6 @@ Tests verify:
 """
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -53,10 +52,12 @@ def _noop_rcon(cmd: str) -> str:
 
 
 def test_load_plains_day_dry_run() -> None:
-    result = load_chamber("plains_day", _noop_rcon, dry_run=True, verbose=False)
+    result = load_chamber(
+        "plains_day", _noop_rcon, seed_override=505, dry_run=True, verbose=False,
+    )
     assert isinstance(result, LoadResult)
     assert result.chamber == "plains_day"
-    assert result.seed == 505      # seed fixed in YAML
+    assert result.seed == 505
     assert result.commands_run > 0
     assert result.success
     assert all(r.ok for r in result.results)
@@ -69,9 +70,18 @@ def test_dry_run_never_calls_rcon() -> None:
 
 
 def test_load_forest_day_dry_run() -> None:
-    result = load_chamber("forest_day", _noop_rcon, dry_run=True, verbose=False)
+    result = load_chamber(
+        "forest_day", _noop_rcon, seed_override=101, dry_run=True, verbose=False,
+    )
     assert result.seed == 101
-    assert result.commands_run > 100   # trees + ores + chamber = many commands
+    assert result.commands_run > 100   # trees + caves + ores + mobs = many commands
+    # Cave generator should produce fill ... air commands
+    cmds = [r.command for r in result.results]
+    cave_cmds = [c for c in cmds if c.startswith("fill") and c.endswith("air")]
+    assert cave_cmds, "Expected cave carving commands"
+    # Passive mobs should spawn even on peaceful difficulty
+    summon_cmds = [c for c in cmds if c.startswith("summon")]
+    assert summon_cmds, "Expected passive mob summons on peaceful"
 
 
 def test_load_hostile_night_dry_run() -> None:
@@ -200,9 +210,157 @@ def test_load_result_success_property() -> None:
     assert r.errors == []
 
 
+# ─── Spawn point ──────────────────────────────────────────────────────────────
+
+def test_default_spawn_point_commands() -> None:
+    """Default spawn point [0, -56, 0] emitted when YAML has no spawn_point."""
+    result = load_chamber("plains_day", _noop_rcon, dry_run=True, verbose=False)
+    cmds = [r.command for r in result.results]
+    assert "setworldspawn 0 -56 0" in cmds
+    assert "spawnpoint @a 0 -56 0" in cmds
+    assert "tp @a 0 -56 0" in cmds
+
+
+def test_custom_spawn_point(tmp_path: Path) -> None:
+    """Custom spawn_point in YAML produces matching commands."""
+    chamber_yaml = {
+        "name": "spawn_test",
+        "description": "test",
+        "spawn_point": [10, -50, 5],
+        "features": {
+            "time": "day",
+            "weather": "clear",
+            "difficulty": "peaceful",
+        },
+    }
+    yaml_path = tmp_path / "spawn_test.yaml"
+    yaml_path.write_text(yaml.dump(chamber_yaml))
+
+    with patch("minecraft_test_chambers.chamber_loader._CHAMBERS_DIR", tmp_path):
+        result = load_chamber("spawn_test", _noop_rcon, dry_run=True, verbose=False)
+
+    cmds = [r.command for r in result.results]
+    assert "setworldspawn 10 -50 5" in cmds
+    assert "spawnpoint @a 10 -50 5" in cmds
+    assert "tp @a 10 -50 5" in cmds
+
+
+# ─── Inventory ────────────────────────────────────────────────────────────────
+
+def test_inventory_generates_clear_and_give() -> None:
+    """Inventory section produces clear + give + equip commands."""
+    result = load_chamber(
+        "village_assault", _noop_rcon, seed_override=1, dry_run=True, verbose=False,
+    )
+    cmds = [r.command for r in result.results]
+    assert "clear @a" in cmds
+    assert "give @a minecraft:iron_sword 1" in cmds
+    assert "give @a minecraft:shield 1" in cmds
+    assert "item replace entity @a weapon.mainhand with minecraft:iron_sword" in cmds
+    assert "item replace entity @a weapon.offhand with minecraft:shield" in cmds
+
+
+def test_inventory_armor_equip(tmp_path: Path) -> None:
+    """Armor list equips head/chest/legs/feet slots."""
+    chamber_yaml = {
+        "name": "armor_test",
+        "description": "test",
+        "features": {
+            "time": "day",
+            "weather": "clear",
+            "inventory": {
+                "armor": [
+                    "iron_helmet", "iron_chestplate",
+                    "iron_leggings", "iron_boots",
+                ],
+                "items": {"iron_sword": 1},
+            },
+        },
+    }
+    yaml_path = tmp_path / "armor_test.yaml"
+    yaml_path.write_text(yaml.dump(chamber_yaml))
+
+    with patch("minecraft_test_chambers.chamber_loader._CHAMBERS_DIR", tmp_path):
+        result = load_chamber("armor_test", _noop_rcon, dry_run=True, verbose=False)
+
+    cmds = [r.command for r in result.results]
+    assert "item replace entity @a armor.head with minecraft:iron_helmet" in cmds
+    assert "item replace entity @a armor.chest with minecraft:iron_chestplate" in cmds
+    assert "item replace entity @a armor.legs with minecraft:iron_leggings" in cmds
+    assert "item replace entity @a armor.feet with minecraft:iron_boots" in cmds
+
+
+def test_clear_always_runs_even_without_inventory() -> None:
+    """Every chamber clears player inventory, even without an inventory section."""
+    result = load_chamber(
+        "plains_day", _noop_rcon, seed_override=1, dry_run=True, verbose=False,
+    )
+    cmds = [r.command for r in result.results]
+    assert "clear @a" in cmds
+    assert not any(c.startswith("give @a") for c in cmds)
+
+
+def test_random_seed_when_no_seed_in_yaml() -> None:
+    """With no seed in YAML and no override, a random seed is generated."""
+    r1 = load_chamber("plains_day", _noop_rcon, dry_run=True, verbose=False)
+    r2 = load_chamber("plains_day", _noop_rcon, dry_run=True, verbose=False)
+    assert isinstance(r1.seed, int)
+    assert isinstance(r2.seed, int)
+    # Extremely unlikely but technically possible for two random seeds to match.
+    # We just verify they are valid ints; determinism is tested with seed_override.
+
+
 def test_load_result_chamber_name() -> None:
     r = load_chamber("open_plains", _noop_rcon, dry_run=True, verbose=False)
     assert r.chamber == "open_plains"
+
+
+# ─── Pipeline ordering ───────────────────────────────────────────────────────
+
+def test_raw_cmds_run_before_ores_and_mobs() -> None:
+    """raw_cmds (terrain) must execute before ore/mob generators so that
+    ores are placed into solid terrain and mobs spawn on real ground."""
+    result = load_chamber(
+        "forest_day", _noop_rcon, seed_override=42, dry_run=True, verbose=False,
+    )
+    cmds = [r.command for r in result.results]
+
+    # Find indices of key command types
+    terrain_fill = next(
+        i for i, c in enumerate(cmds) if "fill" in c and "stone" in c and "-32" in c
+    )
+    first_ore = next(
+        (i for i, c in enumerate(cmds) if "coal_ore" in c or "iron_ore" in c),
+        None,
+    )
+    first_summon = next(
+        (i for i, c in enumerate(cmds) if c.startswith("summon")),
+        None,
+    )
+
+    if first_ore is not None:
+        assert terrain_fill < first_ore, "Terrain fill must precede ore placement"
+    if first_summon is not None:
+        assert terrain_fill < first_summon, "Terrain fill must precede mob summons"
+
+
+def test_caves_run_before_ores() -> None:
+    """Cave carving must happen before ore placement so ores appear on walls."""
+    result = load_chamber(
+        "forest_day", _noop_rcon, seed_override=42, dry_run=True, verbose=False,
+    )
+    cmds = [r.command for r in result.results]
+
+    cave_cmds_idx = [i for i, c in enumerate(cmds) if c.endswith("air") and "fill" in c]
+    ore_cmds_idx = [
+        i for i, c in enumerate(cmds)
+        if any(o in c for o in ("coal_ore", "iron_ore", "copper_ore", "gold_ore", "diamond_ore"))
+    ]
+
+    if cave_cmds_idx and ore_cmds_idx:
+        assert max(cave_cmds_idx) < min(ore_cmds_idx), (
+            "All cave carving must finish before first ore placement"
+        )
 
 
 # ─── RconClient ───────────────────────────────────────────────────────────────

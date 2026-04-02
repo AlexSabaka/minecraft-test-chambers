@@ -44,7 +44,7 @@ public final class EpisodeWriter implements AutoCloseable {
     }
 
     /**
-     * Write one action record as a JSON line.
+     * Write one semantic action record as a JSON line.
      *
      * @param action    e.g. "gather"
      * @param argsJson  pre-built JSON object string for args, e.g. {"block_type":"gold_ore","count":1}
@@ -72,6 +72,34 @@ public final class EpisodeWriter implements AutoCloseable {
             writer.flush();
         } catch (IOException e) {
             logger.warning("[Recorder] Failed to write record: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Write one MineRL-format tick record as a JSON line.
+     *
+     * <p>Schema (no {@code action}/{@code args}/{@code result}/{@code ts_start}):
+     * <pre>{"controls":{...},"obs":{...},"ts_end":1234.567,"chamber":"...","seed":0}</pre>
+     *
+     * @param controlsJson  pre-built JSON object with all MineRL action-space fields
+     * @param obs           player observation snapshot at this tick
+     * @param tsEnd         epoch seconds of this tick snapshot
+     */
+    public synchronized void writeMineRL(String controlsJson, ObsSnapshot obs, double tsEnd) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            sb.append("{");
+            sb.append("\"controls\":").append(controlsJson);
+            sb.append(",\"obs\":").append(obs.toJson());
+            sb.append(",\"ts_end\":").append(String.format("%.3f", tsEnd));
+            sb.append(",\"chamber\":\"").append(ObsSnapshot.jsonEscape(chamber)).append("\"");
+            sb.append(",\"seed\":").append(seed);
+            sb.append("}");
+            writer.write(sb.toString());
+            writer.newLine();
+            writer.flush();
+        } catch (IOException e) {
+            logger.warning("[Recorder] Failed to write MineRL record: " + e.getMessage());
         }
     }
 

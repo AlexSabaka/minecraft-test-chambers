@@ -4,7 +4,6 @@
 
 name: desert_day
 description: "Arid desert in blazing daylight — sand floor, gold outcrops, hostile husks"
-seed: 711
 
 features:
   biome: minecraft:desert
@@ -34,6 +33,12 @@ features:
       area: [-13, -62, -13, 13, -62, 13]
       difficulty: hard
 
+  inventory:
+    mainhand: stone_sword
+    items:
+      stone_sword: 1
+      leather_helmet: 1
+
   gamerule_overrides:
     doMobSpawning: "false"
 
@@ -54,11 +59,3 @@ features:
     - "setblock 5 -62 -12 cactus"
     - "setblock -10 -63 10 cactus"
     - "setblock -10 -62 10 cactus"
-
-sim_state:
-  biomes: [desert, badlands, eroded_badlands]
-  y_range: [60, 72]
-  nearby_blocks: [sand, sandstone, gravel, cactus, dead_bush, gold_ore, coal_ore]
-  mob_count: 5
-  mob_pool: [husk, skeleton]
-  light_range: [12, 15]

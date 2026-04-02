@@ -12,10 +12,12 @@ import java.nio.file.Path;
  *
  * <p>RCON commands (usable from Python via rcon_client.send()):
  * <pre>
- *   /recorder start [chamber] [seed]   — begin episode recording
- *   /recorder stop                     — flush &amp; close current episode
- *   /recorder status                   — print current file path to console
+ *   /recorder start [chamber] [seed] [format]  — begin episode recording
+ *   /recorder stop                              — flush &amp; close current episode
+ *   /recorder status                            — print current file path to console
  * </pre>
+ *
+ * <p>Supported formats: {@code semantic} (default), {@code minerl}.
  *
  * <p>Episodes are written to &lt;repo-root&gt;/episodes/ matching the Python format:
  * <pre>{chamber}_{seed}_{yyyyMMdd'T'HHmmss'Z'}.jsonl</pre>
@@ -56,6 +58,11 @@ public class RecorderPlugin extends JavaPlugin {
                     sender.sendMessage("Invalid seed '" + args[2] + "' — must be an integer.");
                     return true;
                 }
+                String format = args.length >= 4 ? args[3].toLowerCase() : "semantic";
+                if (!format.equals("semantic") && !format.equals("minerl")) {
+                    sender.sendMessage("Unknown format '" + format + "'. Use 'semantic' or 'minerl'.");
+                    return true;
+                }
 
                 if (writer != null) {
                     sender.sendMessage("Already recording. /recorder stop first.");
@@ -65,8 +72,9 @@ public class RecorderPlugin extends JavaPlugin {
                 Path episodesDir = resolveEpisodesDir();
                 try {
                     writer = new EpisodeWriter(episodesDir, chamber, seed, getLogger());
-                    listener.setWriter(writer, chamber, seed);
-                    sender.sendMessage("Recorder started: " + writer.getFilePath().getFileName());
+                    listener.setWriter(writer, chamber, seed, format);
+                    sender.sendMessage("Recorder started: " + writer.getFilePath().getFileName()
+                            + " [" + format + "]");
                 } catch (IOException e) {
                     sender.sendMessage("Failed to open episode file: " + e.getMessage());
                     getLogger().severe("EpisodeWriter open failed: " + e.getMessage());
@@ -102,7 +110,7 @@ public class RecorderPlugin extends JavaPlugin {
     private String stopRecording() {
         if (writer == null) return "(none)";
         if (listener != null) listener.flushAll();
-        listener.setWriter(null, "unknown", 0L);
+        listener.setWriter(null, "unknown", 0L, "semantic");
         String name = writer.getFilePath().getFileName().toString();
         writer.close();
         writer = null;

@@ -4,7 +4,6 @@
 
 name: swamp_night
 description: "Murky swamp at night with rain — slimes, witch, twisted oaks"
-seed: 933
 
 features:
   biome: minecraft:swamp
@@ -38,6 +37,12 @@ features:
       area: [-10, -62, -10, 10, -62, 10]
       difficulty: hard
 
+  inventory:
+    mainhand: stone_sword
+    items:
+      stone_sword: 1
+      torch: 8
+
   gamerule_overrides:
     doMobSpawning: "false"
 
@@ -53,11 +58,3 @@ features:
     # Hanging vines from tree trunks (decorative)
     - "setblock -5 -61 -3 vine[south=true]"
     - "setblock 4 -61 7 vine[north=true]"
-
-sim_state:
-  biomes: [swamp, mangrove_swamp]
-  y_range: [56, 66]
-  nearby_blocks: [mud, water, lily_pad, oak_log, oak_leaves, vine, clay, dirt, grass_block]
-  mob_count: 6
-  mob_pool: [slime, witch, drowned]
-  light_range: [0, 4]

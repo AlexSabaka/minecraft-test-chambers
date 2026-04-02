@@ -7,13 +7,13 @@ Public API:
 from __future__ import annotations
 
 import random
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
 import yaml
 
+from minecraft_test_chambers.generators.cave import CaveGenerator
 from minecraft_test_chambers.generators.chamber_room import ChamberRoomGenerator
 from minecraft_test_chambers.generators.environment import EnvironmentGenerator
 from minecraft_test_chambers.generators.mob import MobGenerator
@@ -27,6 +27,9 @@ _CHAMBERS_DIR = _REPO_ROOT / "test_chambers"
 
 # Ground-floor Y coordinate when no tp_y is specified in YAML
 _DEFAULT_TP_Y = -57
+
+# Default spawn point when not specified in YAML (origin, above ground)
+_DEFAULT_SPAWN_POINT = [0, -56, 0]
 
 # Area used for the initial world-reset fill operations
 # Superflat bedrock sits at Y=-64, ground at Y=-63/-62
@@ -101,6 +104,7 @@ def load_chamber(
 
     rng = random.Random(seed)
     tp_y: int = int(doc.get("tp_y", _DEFAULT_TP_Y))
+    spawn_point: list[int] = doc.get("spawn_point", _DEFAULT_SPAWN_POINT)
 
     if verbose:
         print(f"\n  Loading chamber '{name}'  (seed={seed})")
@@ -111,11 +115,20 @@ def load_chamber(
     # 1. Area reset — wipe the play zone before building
     all_cmds.extend(_reset_commands(tp_y))
 
+    # 2. Spawn point — set world spawn, per-player spawn, and teleport
+    sx, sy, sz = spawn_point
+    all_cmds.append(f"setworldspawn {sx} {sy} {sz}")
+    all_cmds.append(f"spawnpoint @a {sx} {sy} {sz}")
+    all_cmds.append(f"tp @a {sx} {sy} {sz}")
+
+    # 2b. Always clear player inventory so only YAML-defined items remain
+    all_cmds.append("clear @a")
+
     features: dict[str, Any] = doc.get("features", {})
     raw_cmds: list[str] = doc.get("rcon_cmds", [])   # backward-compat
 
     if features:
-        # 2. Environment (time, weather, biome, difficulty, gamerules)
+        # 3. Environment (time, weather, biome, difficulty, gamerules)
         env_cfg = {
             "time":              features.get("time", doc.get("time", "day")),
             "weather":           features.get("weather", doc.get("weather", "clear")),
@@ -126,35 +139,47 @@ def load_chamber(
         env_gen = EnvironmentGenerator(env_cfg, rng, tp_y=tp_y)
         all_cmds.extend(env_gen.generate())
 
-        # 3. Chamber room (Portal-style walls / ceiling / floor)
+        # 4. Chamber room (Portal-style walls / ceiling / floor)
         if "chamber" in features:
             room_gen = ChamberRoomGenerator(features, rng, tp_y=tp_y)
             all_cmds.extend(room_gen.generate())
 
-        # 4. Structures (before trees/ores so ground is clear)
+        # 5. Structures (before trees/ores so ground is clear)
         if "structures" in features:
             struct_gen = StructureGenerator(features, rng)
             all_cmds.extend(struct_gen.generate())
 
-        # 5. Trees
+        # 6. Escape-hatch raw cmds — terrain / structure fills run BEFORE
+        #    procedural generators so that ores, mobs, and caves are placed
+        #    *into* the correct terrain.
+        if "raw_cmds" in features:
+            all_cmds.extend(features["raw_cmds"])
+
+        # 7. Trees
         if "trees" in features:
             tree_gen = TreeGenerator(features, rng)
             all_cmds.extend(tree_gen.generate())
 
-        # 6. Ores
+        # 8. Caves (carve into terrain before ore/mob placement)
+        if "caves" in features:
+            cave_gen = CaveGenerator(features, rng)
+            all_cmds.extend(cave_gen.generate())
+
+        # 9. Ores (placed after terrain + caves so they sit in solid blocks)
         if "ores" in features:
             ore_gen = OreGenerator(features, rng)
             all_cmds.extend(ore_gen.generate())
 
-        # 7. Mobs (last so terrain is settled)
+        # 10. Mobs (last procedural step so terrain is settled)
         if "mobs" in features:
             difficulty = features.get("difficulty", "normal")
             mob_gen = MobGenerator(features, rng, difficulty=difficulty)
             all_cmds.extend(mob_gen.generate())
 
-        # 8. Escape-hatch raw cmds inside features block
-        if "raw_cmds" in features:
-            all_cmds.extend(features["raw_cmds"])
+        # 11. Inventory — clear and equip player after everything else
+        inventory = features.get("inventory")
+        if inventory:
+            all_cmds.extend(_inventory_commands(inventory))
 
     elif raw_cmds:
         # Legacy YAML: only rcon_cmds present, no features section
@@ -240,5 +265,55 @@ def _reset_commands(tp_y: int) -> list[str]:
     # Restore grass surface and bedrock floor
     cmds.append(f"fill -{r} -63 -{r} {r} -63 {r} grass_block")
     cmds.append(f"fill -{r} -64 -{r} {r} -64 {r} bedrock")
+
+    return cmds
+
+
+# Armor slot order matches the YAML list: [head, chest, legs, feet]
+_ARMOR_SLOTS = ["armor.head", "armor.chest", "armor.legs", "armor.feet"]
+
+
+def _inventory_commands(inventory: dict[str, Any]) -> list[str]:
+    """Generate give + equip commands from an ``inventory`` config block.
+
+    The player is already cleared by the main pipeline; this function only
+    adds the requested items and equipment.
+
+    Schema::
+
+        inventory:
+          mainhand: diamond_sword
+          offhand: shield
+          armor: [iron_helmet, iron_chestplate, iron_leggings, iron_boots]
+          items:
+            diamond_sword: 1
+            torch: 16
+    """
+    cmds: list[str] = []
+
+    # Give items into general inventory
+    items: dict[str, int] = inventory.get("items", {})
+    for item, count in items.items():
+        cmds.append(f"give @a minecraft:{item} {count}")
+
+    # Equip mainhand / offhand
+    mainhand = inventory.get("mainhand")
+    if mainhand:
+        cmds.append(
+            f"item replace entity @a weapon.mainhand with minecraft:{mainhand}"
+        )
+
+    offhand = inventory.get("offhand")
+    if offhand:
+        cmds.append(
+            f"item replace entity @a weapon.offhand with minecraft:{offhand}"
+        )
+
+    # Equip armor (list of up to 4 items: head, chest, legs, feet)
+    armor: list[str] = inventory.get("armor", [])
+    for slot_name, piece in zip(_ARMOR_SLOTS, armor):
+        cmds.append(
+            f"item replace entity @a {slot_name} with minecraft:{piece}"
+        )
 
     return cmds

@@ -4,7 +4,6 @@
 
 name: frozen_outpost
 description: "Freezing blizzard conditions — powder snow traps, strays, desperate search for warmth"
-seed: 3318
 
 features:
   biome: minecraft:ice_spikes
@@ -23,6 +22,10 @@ features:
       area: [-12, -62, -12, 12, -62, 12]
       difficulty: hard
 
+  inventory:
+    items:
+      torch: 4
+
   gamerule_overrides:
     doMobSpawning: "false"
 
@@ -40,11 +43,3 @@ features:
     - "fill 4 -63 4 6 -63 6 powder_snow"
     - "fill -6 -63 -4 -4 -63 -2 powder_snow"
     - "setblock -2 -63 5 powder_snow"
-
-sim_state:
-  biomes: [ice_spikes, snowy_tundra, snowy_taiga]
-  y_range: [60, 85]
-  nearby_blocks: [snow_block, snow, packed_ice, blue_ice, spruce_log, powder_snow]
-  mob_count: 2
-  mob_pool: [stray]
-  light_range: [0, 6]

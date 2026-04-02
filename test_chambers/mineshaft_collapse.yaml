@@ -6,7 +6,6 @@
 
 name: mineshaft_collapse
 description: "Collapsed mineshaft — gravel cave-ins, spider nests, find the exit and the loot cart"
-seed: 8471
 
 features:
   biome: minecraft:dripstone_caves
@@ -46,6 +45,12 @@ features:
       area: [-12, -62, -12, 12, -62, 0]
       difficulty: normal
 
+  inventory:
+    mainhand: wooden_pickaxe
+    items:
+      wooden_pickaxe: 1
+      torch: 8
+
   gamerule_overrides:
     doMobSpawning: "false"
 
@@ -83,12 +88,3 @@ features:
     - "setblock -2 -63 4 oak_fence"
     - "setblock 2 -63 4 oak_fence"
     - "setblock -2 -63 -4 oak_planks"
-
-sim_state:
-  biomes: [dripstone_caves, deep_dark]
-  y_range: [0, 30]
-  nearby_blocks: [gravel, cobweb, oak_planks, rail, stone, dirt, deepslate_iron_ore,
-                  deepslate_coal_ore, torch, oak_fence]
-  mob_count: 7
-  mob_pool: [cave_spider, spider, zombie]
-  light_range: [0, 6]

@@ -4,7 +4,6 @@
 
 name: desert_tomb
 description: "Scorching desert sands hiding an ancient tomb — trapped loot, hostile husks"
-seed: 1042
 
 features:
   biome: minecraft:desert
@@ -24,6 +23,12 @@ features:
       area: [-10, -62, -10, 10, -62, 10]
       difficulty: normal
 
+  inventory:
+    mainhand: stone_sword
+    items:
+      stone_sword: 1
+      torch: 4
+
   gamerule_overrides:
     doMobSpawning: "false"
 
@@ -41,11 +46,3 @@ features:
     # Decor
     - "setblock -3 -62 -3 chiseled_sandstone"
     - "setblock 3 -62 3 chiseled_sandstone"
-
-sim_state:
-  biomes: [desert, badlands, savanna]
-  y_range: [55, 75]
-  nearby_blocks: [sand, sandstone, cut_sandstone, dead_bush, cactus, gold_ore]
-  mob_count: 3
-  mob_pool: [husk]
-  light_range: [12, 15]

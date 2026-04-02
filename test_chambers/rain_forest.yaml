@@ -4,7 +4,6 @@
 
 name: rain_forest
 description: "Rainy night in a forest — player starts damaged, survival pressure"
-seed: 606
 
 features:
   biome: minecraft:dark_forest
@@ -37,11 +36,3 @@ features:
 
   raw_cmds:
     - "effect give @a minecraft:instant_damage 1 3 true"
-
-sim_state:
-  biomes: [plains, taiga, forest, dark_forest]
-  y_range: [58, 70]
-  nearby_blocks: [oak_log, dark_oak_log, stone, dirt, grass_block, gravel]
-  mob_count: 3
-  mob_pool: [zombie, skeleton]
-  light_range: [0, 5]

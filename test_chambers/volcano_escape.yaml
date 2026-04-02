@@ -5,7 +5,6 @@
 
 name: volcano_escape
 description: "Volcanic caldera flooding with lava — mine diamonds fast and reach the top"
-seed: 5150
 
 features:
   biome: minecraft:basalt_deltas
@@ -23,6 +22,12 @@ features:
       count: [4, 7]
       area: [-10, -63, -10, 10, -60, 10]
       vein_size: 2
+
+  inventory:
+    mainhand: iron_pickaxe
+    items:
+      iron_pickaxe: 1
+      cooked_beef: 4
 
   gamerule_overrides:
     doMobSpawning: "false"
@@ -57,16 +62,8 @@ features:
     - "fill 11 -63 -10 12 -63 10 lava"
     # Escape ledge at the top — safe cobblestone platform with chest
     - "fill -4 -54 -4 4 -54 4 cobblestone"
-    - "setblock 0 -53 0 chest{Items:[{id:\"minecraft:ender_pearl\",Count:4b,Slot:0b},{id:\"minecraft:fire_resistance\",Count:2b,Slot:1b}]}"
+    - "setblock 0 -53 0 chest{Items:[{id:\"minecraft:ender_pearl\",Count:4b,Slot:0b},{id:\"minecraft:golden_apple\",Count:2b,Slot:1b}]}"
     # Fire for ambiance
     - "setblock -5 -62 0 fire"
     - "setblock 5 -62 0 fire"
     - "setblock 0 -62 5 fire"
-
-sim_state:
-  biomes: [basalt_deltas, nether_wastes]
-  y_range: [30, 60]
-  nearby_blocks: [basalt, blackstone, obsidian, magma_block, lava, coal_ore, diamond_ore, fire]
-  mob_count: 0
-  mob_pool: []
-  light_range: [4, 11]

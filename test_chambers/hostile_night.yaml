@@ -4,7 +4,6 @@
 
 name: hostile_night
 description: "Dark night with zombie, skeleton and spider packs spawned nearby"
-seed: 303
 
 features:
   biome: minecraft:plains
@@ -33,13 +32,11 @@ features:
       area: [-7, -62, -7, 7, -62, 7]
       difficulty: normal
 
+  inventory:
+    mainhand: stone_sword
+    items:
+      stone_sword: 1
+      torch: 8
+
   gamerule_overrides:
     doMobSpawning: "false"
-
-sim_state:
-  biomes: [plains, forest, taiga]
-  y_range: [58, 70]
-  nearby_blocks: [stone, dirt, grass_block, cobblestone]
-  mob_count: 5
-  mob_pool: [zombie, skeleton, spider, creeper]
-  light_range: [0, 7]

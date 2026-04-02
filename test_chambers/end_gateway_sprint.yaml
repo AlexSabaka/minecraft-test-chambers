@@ -6,7 +6,6 @@
 
 name: end_gateway_sprint
 description: "Outer End islands — platform-hop through endermen and the void to reach the gateway"
-seed: 7734
 
 features:
   biome: minecraft:the_end
@@ -24,6 +23,10 @@ features:
       count: [4, 7]
       area: [-14, -62, -14, 14, -62, 14]
       difficulty: hard
+
+  inventory:
+    items:
+      cooked_beef: 4
 
   gamerule_overrides:
     doMobSpawning: "false"
@@ -64,12 +67,3 @@ features:
     # Purpur slab stepping aid on the hardest gap
     - "setblock 21 -63 -1 purpur_slab"
     - "setblock 22 -63 -1 purpur_slab"
-
-sim_state:
-  biomes: [the_end, small_end_islands, end_highlands]
-  y_range: [55, 75]
-  nearby_blocks: [end_stone, chorus_plant, chorus_flower, purpur_block, purpur_slab,
-                  obsidian, end_gateway, end_rod]
-  mob_count: 5
-  mob_pool: [enderman]
-  light_range: [0, 5]

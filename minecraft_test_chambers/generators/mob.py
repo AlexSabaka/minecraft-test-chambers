@@ -49,6 +49,25 @@ _BASE_HEALTH: dict[str, float] = {
 
 _DEFAULT_HEALTH = 20.0
 
+# Passive / neutral mobs that survive peaceful difficulty.  When the
+# difficulty scale is 0.0 (peaceful) hostile mobs are skipped, but these
+# are still summoned with normal (scale=1.0) stats.
+_PASSIVE_MOBS: set[str] = {
+    # Farm / overworld passive
+    "chicken", "cow", "pig", "sheep", "mooshroom",
+    "horse", "donkey", "mule", "rabbit", "turtle",
+    "fox", "panda", "bee", "axolotl", "goat", "frog",
+    "allay", "sniffer", "camel", "armadillo", "cat",
+    "parrot", "ocelot",
+    # Aquatic passive
+    "squid", "glow_squid", "cod", "salmon", "tropical_fish",
+    "pufferfish", "dolphin",
+    # Utility / NPC
+    "villager", "wandering_trader", "iron_golem", "snow_golem",
+    # Neutral (won't attack unprovoked — still useful in peaceful chambers)
+    "wolf", "bat", "strider",
+}
+
 
 class MobGenerator(FeatureGenerator):
     """Spawns mob packs with optional difficulty scaling.
@@ -80,7 +99,9 @@ class MobGenerator(FeatureGenerator):
 
             scale = _DIFFICULTY_SCALE.get(diff_key, 1.0)
             if scale == 0.0:
-                continue  # peaceful — skip hostile mobs
+                if mob_type not in _PASSIVE_MOBS:
+                    continue  # peaceful — skip hostile mobs
+                scale = 1.0  # passive mobs get normal stats on peaceful
 
             for _ in range(count):
                 x, y, z = self._rand_pos(area)

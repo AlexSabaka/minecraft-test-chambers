@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Episode Viewer</title>
+<style>
+  /* ── Reset & base ─────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0f1117;
+    --surface:   #1a1d27;
+    --surface2:  #22263a;
+    --border:    #2e3347;
+    --accent:    #5c8aff;
+    --accent2:   #3dffa3;
+    --danger:    #ff5c5c;
+    --warn:      #ffd966;
+    --text:      #dde1f0;
+    --text-dim:  #7880a0;
+    --radius:    8px;
+    --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
+  }
+
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ───────────────────────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  header h1 {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: .03em;
+    color: var(--text);
+  }
+  header .meta {
+    font-size: .78rem;
+    color: var(--text-dim);
+    margin-left: auto;
+  }
+  header .meta strong { color: var(--accent2); }
+
+  /* ── Drop zone ────────────────────────────────────────────────────────── */
+  #drop-zone {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    border: 2px dashed var(--border);
+    margin: 32px;
+    border-radius: 16px;
+    padding: 48px;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+  }
+  #drop-zone:hover, #drop-zone.over {
+    border-color: var(--accent);
+    background: rgba(92,138,255,.06);
+  }
+  #drop-zone .icon { font-size: 3rem; opacity: .5; }
+  #drop-zone p { color: var(--text-dim); font-size: .9rem; text-align: center; }
+  #drop-zone label {
+    cursor: pointer;
+    padding: 10px 22px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 6px;
+    font-size: .85rem;
+    font-weight: 600;
+    transition: opacity .15s;
+  }
+  #drop-zone label:hover { opacity: .85; }
+  #file-input { display: none; }
+
+  /* ── Main viewer ──────────────────────────────────────────────────────── */
+  #viewer {
+    display: none;
+    flex: 1;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* progress bar */
+  #progress-bar-wrap {
+    height: 3px;
+    background: var(--surface2);
+    flex-shrink: 0;
+  }
+  #progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width .2s;
+    width: 0%;
+  }
+
+  /* main pane */
+  #pane {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-rows: 1fr;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Screenshot area ──────────────────────────────────────────────────── */
+  #screenshot-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    overflow: hidden;
+    position: relative;
+  }
+  #screenshot-area img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  #no-screenshot {
+    color: var(--text-dim);
+    font-size: .85rem;
+    text-align: center;
+  }
+  #no-screenshot .icon { font-size: 2.5rem; display: block; margin-bottom: 8px; opacity: .3; }
+
+  /* ── Side panel ───────────────────────────────────────────────────────── */
+  #side-panel {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .panel-section {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-section:last-child { border-bottom: none; flex: 1; }
+
+  .section-label {
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+
+  /* action badge */
+  .action-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: .8rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  /* result text */
+  #result-text {
+    font-size: .85rem;
+    color: var(--text);
+    line-height: 1.5;
+    margin-bottom: 6px;
+  }
+
+  /* args code block */
+  #args-block {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    font-family: var(--font-mono);
+    font-size: .76rem;
+    color: var(--accent2);
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.6;
+    margin-top: 4px;
+  }
+
+  /* obs grid */
+  .obs-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 10px;
+    font-size: .8rem;
+  }
+  .obs-item { display: flex; flex-direction: column; gap: 2px; }
+  .obs-key   { color: var(--text-dim); font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; }
+  .obs-val   { color: var(--text); font-family: var(--font-mono); font-size: .8rem; }
+  .obs-val.health { color: #ff6b6b; }
+  .obs-val.hunger { color: #ffd966; }
+  .obs-val.xp     { color: #5cff8a; }
+  .obs-val.held   { color: var(--accent2); }
+  .obs-val.facing { color: var(--accent); }
+
+  /* health / hunger bar */
+  .stat-bar-wrap { display: flex; align-items: center; gap: 6px; }
+  .stat-bar { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+  .stat-bar-fill { height: 100%; border-radius: 3px; transition: width .3s; }
+  .stat-bar-fill.health { background: #ff6b6b; }
+  .stat-bar-fill.hunger { background: #ffd966; }
+
+  /* inventory */
+  #inv-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 4px;
+  }
+  .inv-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: .73rem;
+    font-family: var(--font-mono);
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .inv-item .count { color: var(--accent2); font-weight: 700; margin-left: 4px; }
+
+  /* timing */
+  #timing { font-family: var(--font-mono); font-size: .75rem; color: var(--text-dim); }
+
+  /* ── Nav bar ──────────────────────────────────────────────────────────── */
+  #nav-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .nav-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 7px 16px;
+    font-size: .82rem;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+    user-select: none;
+  }
+  .nav-btn:hover:not(:disabled)  { background: var(--border); border-color: var(--accent); }
+  .nav-btn:disabled { opacity: .35; cursor: not-allowed; }
+  .nav-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .nav-btn.primary:hover:not(:disabled) { opacity: .85; }
+
+  #step-counter {
+    font-size: .82rem;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    min-width: 90px;
+    text-align: center;
+  }
+  #step-counter strong { color: var(--text); }
+
+  #step-input {
+    width: 60px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: .82rem;
+    font-family: var(--font-mono);
+    text-align: center;
+    outline: none;
+  }
+  #step-input:focus { border-color: var(--accent); }
+
+  .kbd-hint { color: var(--text-dim); font-size: .72rem; margin-left: auto; }
+  .kbd {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: .72rem;
+    font-family: var(--font-mono);
+  }
+
+  /* ── Action colour map ────────────────────────────────────────────────── */
+  .badge-navigate  { background: #1e2d4a; color: #5c8aff; border: 1px solid #2e4070; }
+  .badge-gather    { background: #1e3320; color: #3dffa3; border: 1px solid #2e5030; }
+  .badge-combat    { background: #3a1e1e; color: #ff6b6b; border: 1px solid #602020; }
+  .badge-craft     { background: #2e2a10; color: #ffd966; border: 1px solid #504010; }
+  .badge-transfer  { background: #1e2a3a; color: #60c8ff; border: 1px solid #204060; }
+  .badge-interact  { background: #2a1e3a; color: #c060ff; border: 1px solid #402060; }
+  .badge-say       { background: #1e2e2e; color: #3dffd8; border: 1px solid #104040; }
+  .badge-consume   { background: #2e1e2e; color: #ff8cff; border: 1px solid #501050; }
+  .badge-idle      { background: #1e1e1e; color: #606070; border: 1px solid #303040; }
+  .badge-take_damage { background: #3a1a1a; color: #ff4040; border: 1px solid #501010; }
+  .badge-heal      { background: #1a3a1a; color: #40ff80; border: 1px solid #104010; }
+  .badge-minerl    { background: #1a2a3a; color: #ffa040; border: 1px solid #304050; }
+  .badge-unknown   { background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); }
+
+  /* ── MineRL controls grid ──────────────────────────────────────── */
+  #controls-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 8px;
+  }
+  .ctrl-key {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: .72rem;
+    font-family: var(--font-mono);
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .ctrl-key.on  { background: #1e3320; color: #3dffa3; border-color: #2e5030; font-weight: 700; }
+  .ctrl-key.off { background: var(--surface2); color: var(--text-dim); }
+  #camera-val {
+    font-family: var(--font-mono);
+    font-size: .78rem;
+    color: var(--accent2);
+    margin-top: 6px;
+  }
+  #controls-block {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    font-family: var(--font-mono);
+    font-size: .76rem;
+    color: var(--accent2);
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.6;
+    margin-top: 8px;
+  }
+  #hotbar-row {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .hotbar-slot {
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .72rem;
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+  }
+  .hotbar-slot.active { background: #2a3a1a; border-color: #3dffa3; color: #3dffa3; font-weight: 700; }
+
+  /* ── Scrollbar ────────────────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<header>
+  <h1>🎮 Episode Viewer</h1>
+  <span id="header-meta" class="meta"></span>
+  <label id="reload-label" style="display:none; cursor:pointer; font-size:.8rem;
+         color:var(--text-dim); text-decoration:underline;" onclick="resetViewer()">
+    Load different file
+  </label>
+</header>
+
+<!-- ── Drop zone (shown when no file loaded) ──────────────────────────────── -->
+<div id="drop-zone">
+  <span class="icon">📂</span>
+  <p>Drop an episode <strong>.jsonl</strong> file here<br>
+     (recorded or merged with screenshots)</p>
+  <label for="file-input">Choose file…</label>
+  <input type="file" id="file-input" accept=".jsonl,.txt">
+  <p style="font-size:.75rem; margin-top:-6px;">
+    Works with plain episode files and with <code>*_merged.jsonl</code> files that include screenshots.
+  </p>
+</div>
+
+<!-- ── Viewer (hidden until file loaded) ──────────────────────────────────── -->
+<div id="viewer">
+  <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+
+  <div id="pane">
+    <!-- Screenshot -->
+    <div id="screenshot-area">
+      <img id="screenshot-img" src="" alt="screenshot" style="display:none">
+      <div id="no-screenshot">
+        <span class="icon">🖼️</span>
+        No screenshot in this record
+      </div>
+    </div>
+
+    <!-- Side panel -->
+    <div id="side-panel">
+
+      <!-- Action -->
+      <div class="panel-section">
+        <div class="section-label" id="action-section-label">Action</div>
+        <!-- Semantic action view -->
+        <div id="semantic-action-view">
+          <span id="action-badge" class="action-badge"></span>
+          <div id="result-text"></div>
+          <div id="args-block"></div>
+        </div>
+        <!-- MineRL controls view -->
+        <div id="minerl-action-view" style="display:none">
+          <span class="action-badge badge-minerl" style="margin-bottom:8px;display:inline-block">MineRL tick</span>
+          <div id="controls-grid"></div>
+          <div id="camera-val"></div>
+          <div id="hotbar-row"></div>
+          <details style="margin-top:8px;color:var(--text-dim);font-size:.75rem;">
+            <summary>Action Space JSON</summary>
+            <div id="controls-block"></div>
+          </details>
+        </div>
+      </div>
+
+      <!-- Observation -->
+      <div class="panel-section">
+        <div class="section-label">Observation</div>
+        <div class="obs-grid">
+          <div class="obs-item" style="grid-column:1/-1">
+            <span class="obs-key">Position</span>
+            <span id="obs-pos" class="obs-val"></span>
+          </div>
+          <div class="obs-item">
+            <span class="obs-key">Facing</span>
+            <span id="obs-facing" class="obs-val facing"></span>
+          </div>
+          <div class="obs-item">
+            <span class="obs-key">XP Level</span>
+            <span id="obs-xp" class="obs-val xp"></span>
+          </div>
+          <div class="obs-item" style="grid-column:1/-1">
+            <span class="obs-key">Health</span>
+            <div class="stat-bar-wrap">
+              <div class="stat-bar"><div id="bar-health" class="stat-bar-fill health"></div></div>
+              <span id="obs-health" class="obs-val health"></span>
+            </div>
+          </div>
+          <div class="obs-item" style="grid-column:1/-1">
+            <span class="obs-key">Hunger</span>
+            <div class="stat-bar-wrap">
+              <div class="stat-bar"><div id="bar-hunger" class="stat-bar-fill hunger"></div></div>
+              <span id="obs-hunger" class="obs-val hunger"></span>
+            </div>
+          </div>
+          <div class="obs-item" style="grid-column:1/-1">
+            <span class="obs-key">Held</span>
+            <span id="obs-held" class="obs-val held"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inventory -->
+      <div class="panel-section">
+        <div class="section-label">Inventory</div>
+        <div id="inv-list"></div>
+      </div>
+
+      <!-- Timing -->
+      <div class="panel-section">
+        <div class="section-label">Timing</div>
+        <div id="timing"></div>
+      </div>
+
+    </div><!-- /side-panel -->
+  </div><!-- /pane -->
+
+  <!-- Nav bar -->
+  <div id="nav-bar">
+    <button class="nav-btn" id="btn-first" onclick="goTo(0)" title="First step">⏮</button>
+    <button class="nav-btn" id="btn-prev"  onclick="step(-1)">&larr; Prev</button>
+    <span id="step-counter"></span>
+    <input type="number" id="step-input" min="1" title="Jump to step">
+    <button class="nav-btn" id="btn-next"  onclick="step(1)">Next &rarr;</button>
+    <button class="nav-btn" id="btn-last"  onclick="goTo(records.length-1)" title="Last step">⏭</button>
+    <span class="kbd-hint">
+      <span class="kbd">←</span> <span class="kbd">→</span> navigate &nbsp;
+      <span class="kbd">Home</span> <span class="kbd">End</span> first/last
+    </span>
+  </div>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let records  = [];
+let cursor   = 0;
+
+// ── File loading ─────────────────────────────────────────────────────────────
+const dropZone  = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const viewer    = document.getElementById('viewer');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('over');
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) loadFile(fileInput.files[0]);
+});
+dropZone.addEventListener('click', e => {
+  // Avoid double-trigger when clicking the label
+  if (e.target.tagName !== 'LABEL') fileInput.click();
+});
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => parseJSONL(e.target.result, file.name);
+  reader.readAsText(file);
+}
+
+function parseJSONL(text, filename) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const parsed = [];
+  for (const line of lines) {
+    try { parsed.push(JSON.parse(line)); }
+    catch { /* skip malformed */ }
+  }
+  if (parsed.length === 0) {
+    alert('No valid JSON records found in this file.');
+    return;
+  }
+
+  records = parsed;
+  cursor  = 0;
+  // For merged MineRL files the first record may only have {ts, image_b64}.
+  // Jump to the first record that actually contains action/controls data.
+  const firstWithData = records.findIndex(r => r.controls || r.action);
+  if (firstWithData > 0) cursor = firstWithData;
+
+  // Update header
+  const first  = records[0];
+  const chamber = first.chamber ?? '?';
+  const seed    = first.seed    ?? '?';
+  const hasImg  = records.some(r => r.image_b64);
+  document.getElementById('header-meta').innerHTML =
+    `<strong>${chamber}</strong> &nbsp;seed&nbsp;<strong>${seed}</strong>` +
+    `&nbsp;&nbsp;${records.length} steps` +
+    (hasImg ? `&nbsp;&nbsp;📷 screenshots included` : '');
+  document.getElementById('reload-label').style.display = 'inline';
+  document.title = `Episode Viewer — ${chamber}`;
+
+  // Show viewer
+  dropZone.style.display = 'none';
+  viewer.style.display   = 'flex';
+
+  render();
+}
+
+function resetViewer() {
+  records = [];
+  cursor  = 0;
+  dropZone.style.display = '';
+  viewer.style.display   = 'none';
+  document.getElementById('reload-label').style.display = 'none';
+  document.getElementById('header-meta').innerHTML = '';
+  fileInput.value = '';
+  document.title  = 'Episode Viewer';
+}
+
+// ── Navigation ───────────────────────────────────────────────────────────────
+function step(delta) { goTo(cursor + delta); }
+
+function goTo(n) {
+  n = Math.max(0, Math.min(records.length - 1, n));
+  cursor = n;
+  render();
+}
+
+document.getElementById('step-input').addEventListener('change', function() {
+  const v = parseInt(this.value, 10);
+  if (!isNaN(v)) goTo(v - 1);
+});
+
+document.addEventListener('keydown', e => {
+  if (!records.length) return;
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); step(1); }
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   { e.preventDefault(); step(-1); }
+  if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+  if (e.key === 'End')  { e.preventDefault(); goTo(records.length - 1); }
+});
+
+// ── Render ───────────────────────────────────────────────────────────────────
+const ACTION_COLORS = {
+  navigate: 'navigate', gather: 'gather', combat: 'combat',
+  craft: 'craft', transfer: 'transfer', interact: 'interact', say: 'say',
+  consume: 'consume', idle: 'idle', take_damage: 'take_damage', heal: 'heal',
+};
+
+function render() {
+  const rec = records[cursor];
+  if (!rec) return;
+
+  // Progress
+  const pct = records.length > 1 ? (cursor / (records.length - 1)) * 100 : 100;
+  document.getElementById('progress-bar').style.width = pct + '%';
+
+  // Step counter + jump input
+  document.getElementById('step-counter').innerHTML =
+    `Step <strong>${cursor + 1}</strong> / ${records.length}`;
+  document.getElementById('step-input').value = cursor + 1;
+
+  // Nav buttons
+  document.getElementById('btn-prev').disabled  = (cursor === 0);
+  document.getElementById('btn-first').disabled = (cursor === 0);
+  document.getElementById('btn-next').disabled  = (cursor === records.length - 1);
+  document.getElementById('btn-last').disabled  = (cursor === records.length - 1);
+
+  // ── Screenshot ──────────────────────────────────────────────────────────
+  const img     = document.getElementById('screenshot-img');
+  const noShot  = document.getElementById('no-screenshot');
+  if (rec.image_b64) {
+    img.src = 'data:image/png;base64,' + rec.image_b64;
+    img.style.display = 'block';
+    noShot.style.display = 'none';
+  } else {
+    img.style.display = 'none';
+    noShot.style.display = '';
+  }
+
+  // ── Action badge ────────────────────────────────────────────────────────
+  const semanticView = document.getElementById('semantic-action-view');
+  const minerlView   = document.getElementById('minerl-action-view');
+
+  if (rec.controls) {
+    // ─ MineRL record ───────────────────────────────────────────────
+    semanticView.style.display = 'none';
+    minerlView.style.display   = '';
+    document.getElementById('action-section-label').textContent = 'Controls';
+
+    const ctrl     = rec.controls;
+    const BOOL_KEYS = ['attack','use','jump','forward','back','left','right',
+                       'sneak','sprint','drop','swapHands','inventory'];
+    const gridEl = document.getElementById('controls-grid');
+    gridEl.innerHTML = BOOL_KEYS.map(k => {
+      const on = ctrl[k] === 1;
+      return `<span class="ctrl-key ${on ? 'on' : 'off'}">${k}</span>`;
+    }).join('');
+
+    const cam = ctrl['camera'] ?? [0, 0];
+    document.getElementById('camera-val').textContent =
+      `camera  Δyaw ${cam[0].toFixed(2)}°  Δpitch ${cam[1].toFixed(2)}°`;
+
+    // Hotbar: find active slot from one-hot
+    let activeSlot = -1;
+    for (let i = 1; i <= 9; i++) {
+      if (ctrl['hotbar.' + i] === 1) { activeSlot = i; break; }
+    }
+    const hotbarEl = document.getElementById('hotbar-row');
+    hotbarEl.innerHTML = Array.from({length: 9}, (_, i) => {
+      const sl = i + 1;
+      const active = sl === activeSlot;
+      return `<div class="hotbar-slot${active ? ' active' : ''}">${sl}</div>`;
+    }).join('');
+
+    // Full JSON dump — always visible regardless of chip styling
+    const displayCtrl = {};
+    for (const [k, v] of Object.entries(ctrl)) {
+      if (!k.startsWith('hotbar.') && k !== 'camera' && k !== 'ESC' && k !== 'pickItem') {
+        displayCtrl[k] = v;
+      }
+    }
+    const cam2 = ctrl['camera'] ?? [0, 0];
+    displayCtrl['camera'] = `[Δyaw ${cam2[0].toFixed(2)}°, Δpitch ${cam2[1].toFixed(2)}°]`;
+    displayCtrl['hotbar_slot'] = activeSlot > 0 ? activeSlot : '—';
+    document.getElementById('controls-block').textContent =
+      JSON.stringify(displayCtrl, null, 2);
+
+  } else {
+    // ─ Semantic record ───────────────────────────────────────────────
+    semanticView.style.display = '';
+    minerlView.style.display   = 'none';
+    document.getElementById('action-section-label').textContent = 'Action';
+
+    const action = rec.action ?? 'unknown';
+    const badgeEl = document.getElementById('action-badge');
+    const colorKey = ACTION_COLORS[action] ?? 'unknown';
+    badgeEl.className = `action-badge badge-${colorKey}`;
+    badgeEl.textContent = action;
+
+    document.getElementById('result-text').textContent = rec.result ?? '';
+    document.getElementById('args-block').textContent =
+      JSON.stringify(rec.args ?? {}, null, 2);
+  }
+
+  // ── Observation ─────────────────────────────────────────────────────────
+  const obs = rec.obs ?? {};
+
+  const pos = obs.pos ?? [];
+  document.getElementById('obs-pos').textContent =
+    pos.length ? `${pos[0].toFixed(1)}, ${pos[1].toFixed(1)}, ${pos[2].toFixed(1)}` : '—';
+
+  document.getElementById('obs-facing').textContent = obs.facing ?? '—';
+  document.getElementById('obs-xp').textContent     = obs.xp != null ? obs.xp : '—';
+
+  const health = obs.health ?? 0;
+  document.getElementById('obs-health').textContent = `${health} / 20`;
+  document.getElementById('bar-health').style.width = `${Math.min(100, (health / 20) * 100)}%`;
+
+  const hunger = obs.hunger ?? 0;
+  document.getElementById('obs-hunger').textContent = `${hunger} / 20`;
+  document.getElementById('bar-hunger').style.width = `${Math.min(100, (hunger / 20) * 100)}%`;
+
+  document.getElementById('obs-held').textContent = obs.held ?? '—';
+
+  // ── Inventory ───────────────────────────────────────────────────────────
+  const invEl  = document.getElementById('inv-list');
+  const inv    = obs.inv ?? {};
+  const items  = Object.entries(inv);
+  if (items.length === 0) {
+    invEl.innerHTML = '<span style="color:var(--text-dim);font-size:.8rem">Empty</span>';
+  } else {
+    invEl.innerHTML = items
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) =>
+        `<span class="inv-item">${name}<span class="count">×${count}</span></span>`
+      ).join('');
+  }
+
+  // ── Timing ──────────────────────────────────────────────────────────────
+  const tsStart  = rec.ts_start;
+  const tsEnd    = rec.ts_end;
+  const duration = (tsStart != null && tsEnd != null)
+    ? ((tsEnd - tsStart) * 1000).toFixed(0) + ' ms'
+    : '—';
+  const startStr = tsStart != null
+    ? new Date(tsStart * 1000).toISOString().replace('T', ' ').replace('Z', ' UTC')
+    : '—';
+  document.getElementById('timing').innerHTML =
+    `<div>Start &nbsp;<span style="color:var(--text)">${startStr}</span></div>` +
+    `<div style="margin-top:4px">Duration <span style="color:var(--text)">${duration}</span></div>`;
+}
+</script>
+</body>
+</html>

@@ -4,7 +4,6 @@
 
 name: jungle_ruins
 description: "Dense jungle in tropical rain — emerald veins, ruined dungeon, hidden dangers"
-seed: 822
 
 features:
   biome: minecraft:jungle
@@ -58,11 +57,3 @@ features:
     - "setblock -6 -62 3 moss_carpet"
     - "setblock 7 -62 -5 moss_carpet"
     - "setblock -9 -62 -8 moss_carpet"
-
-sim_state:
-  biomes: [jungle, bamboo_jungle, sparse_jungle]
-  y_range: [55, 80]
-  nearby_blocks: [jungle_log, jungle_leaves, mossy_cobblestone, vines, emerald_ore, coal_ore, dirt]
-  mob_count: 2
-  mob_pool: [spider]
-  light_range: [7, 12]

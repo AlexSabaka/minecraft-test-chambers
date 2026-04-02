@@ -13,7 +13,14 @@ import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.event.block.BlockDamageEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerItemConsumeEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import com.destroystokyo.paper.event.player.PlayerJumpEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.Location;
@@ -35,8 +42,13 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li><b>transfer</b> — InventoryOpen + InventoryClose diff (items moved to/from container)
  *   <li><b>interact</b> — InventoryOpen + InventoryClose with no diff (chest viewed)
  *   <li><b>craft</b> — CraftItemEvent (item taken from crafting output)
+ *   <li><b>consume</b> — PlayerItemConsumeEvent (food, potion, milk bucket, etc.)
  *   <li><b>say</b> — AsyncPlayerChatEvent
- *   <li><b>navigate</b> — injected automatically before any action when player moved &gt;4 blocks
+ *   <li><b>navigate</b> — injected before discrete events when player moved &gt;4 blocks; also
+ *       emitted by the fixed-interval tick when player moves &gt;1 block per 500 ms
+ *   <li><b>take_damage</b> — tick-based: health dropped ≥ 1.0 between ticks
+ *   <li><b>heal</b> — tick-based: health increased ≥ 1.0 with no food change (regen / golden apple)
+ *   <li><b>idle</b> — tick-based: no significant change; provides a 500 ms observation heartbeat
  * </ul>
  */
 public class PlayerRecorderListener implements Listener {
@@ -85,6 +97,29 @@ public class PlayerRecorderListener implements Listener {
     private final Map<UUID, Location>      lastActionLoc     = new ConcurrentHashMap<>();
     private final Map<UUID, Double>        lastActionTime    = new ConcurrentHashMap<>();
 
+    // ─── Recording mode ──────────────────────────────────────────────────────────
+
+    /** {@code true} when recording in MineRL control-space format. */
+    private volatile boolean mineRLMode = false;
+
+    // ─── Semantic tick recorder state ──────────────────────────────────
+
+    private final Map<UUID, Location> tickPrevLoc    = new ConcurrentHashMap<>();
+    private final Map<UUID, Double>   tickPrevHealth = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer>  tickPrevFood   = new ConcurrentHashMap<>();
+
+    // ─── MineRL per-tick input flags ────────────────────────────────────────
+    // Set by event handlers; read and cleared each 500 ms tick.
+
+    private final Map<UUID, Boolean> mrlAttack       = new ConcurrentHashMap<>();
+    private final Map<UUID, Boolean> mrlUse          = new ConcurrentHashMap<>();
+    private final Map<UUID, Boolean> mrlJump         = new ConcurrentHashMap<>();
+    private final Map<UUID, Boolean> mrlDrop         = new ConcurrentHashMap<>();
+    private final Map<UUID, Boolean> mrlSwapHands    = new ConcurrentHashMap<>();
+    private final Map<UUID, Boolean> mrlInvOpen      = new ConcurrentHashMap<>();
+    private final Map<UUID, Float>   mrlPrevYaw      = new ConcurrentHashMap<>();
+    private final Map<UUID, Float>   mrlPrevPitch    = new ConcurrentHashMap<>();
+
     // ─── Active session ───────────────────────────────────────────────────────
 
     private volatile EpisodeWriter writer;
@@ -95,12 +130,32 @@ public class PlayerRecorderListener implements Listener {
     public PlayerRecorderListener(RecorderPlugin plugin) {
         this.plugin = plugin;
         startCombatTimeoutTask();
+        startTickTask();
+        startMineRLTickTask();
     }
 
-    public void setWriter(EpisodeWriter writer, String chamber, long seed) {
-        this.writer  = writer;
-        this.chamber = chamber;
-        this.seed    = seed;
+    public void setWriter(EpisodeWriter writer, String chamber, long seed, String format) {
+        this.writer    = writer;
+        this.chamber   = chamber;
+        this.seed      = seed;
+        this.mineRLMode = "minerl".equals(format);
+        if (writer != null) {
+            // Seed baseline state so first tick has valid deltas
+            for (Player player : plugin.getServer().getOnlinePlayers()) {
+                UUID uid = player.getUniqueId();
+                tickPrevLoc.put(uid, player.getLocation().clone());
+                tickPrevHealth.put(uid, player.getHealth());
+                tickPrevFood.put(uid, player.getFoodLevel());
+                mrlPrevYaw.put(uid, player.getLocation().getYaw());
+                mrlPrevPitch.put(uid, player.getLocation().getPitch());
+            }
+        } else {
+            tickPrevLoc.clear();
+            tickPrevHealth.clear();
+            tickPrevFood.clear();
+            mrlPrevYaw.clear();
+            mrlPrevPitch.clear();
+        }
     }
 
     // ─── Guards ───────────────────────────────────────────────────────────────
@@ -152,8 +207,7 @@ public class PlayerRecorderListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
-        if (!shouldRecord(player)) return;
-
+        if (!shouldRecord(player)) return;        if (mineRLMode) return;
         double now = EpisodeWriter.nowSecs();
         ObsSnapshot obs = ObsSnapshot.capture(player);
         maybeWriteNavigate(player, obs, now);
@@ -185,6 +239,13 @@ public class PlayerRecorderListener implements Listener {
         // Track attacker start/update of combat
         if (attacker != null && shouldRecord(attacker)) {
             UUID uid = attacker.getUniqueId();
+
+            if (mineRLMode) {
+                // In MineRL mode just set the attack flag; no FSM.
+                mrlAttack.put(uid, Boolean.TRUE);
+                return;
+            }
+
             UUID entityId   = event.getEntity().getUniqueId();
             String entityType = event.getEntity().getType().getKey().getKey();
 
@@ -217,6 +278,7 @@ public class PlayerRecorderListener implements Listener {
     public void onEntityDeath(EntityDeathEvent event) {
         Player killer = event.getEntity().getKiller();
         if (killer == null || !shouldRecord(killer)) return;
+        if (mineRLMode) return;
 
         UUID uid  = killer.getUniqueId();
         UUID eid  = event.getEntity().getUniqueId();
@@ -243,6 +305,11 @@ public class PlayerRecorderListener implements Listener {
         if (!(event.getPlayer() instanceof Player player)) return;
         if (!shouldRecord(player)) return;
 
+        if (mineRLMode) {
+            mrlInvOpen.put(player.getUniqueId(), Boolean.TRUE);
+            return;
+        }
+
         String containerType = resolveContainerType(event.getInventory().getType());
         if (containerType == null) return; // skip crafting / own inventory / etc.
 
@@ -257,6 +324,11 @@ public class PlayerRecorderListener implements Listener {
     public void onInventoryClose(InventoryCloseEvent event) {
         if (!(event.getPlayer() instanceof Player player)) return;
         if (!shouldRecord(player)) return;
+
+        if (mineRLMode) {
+            mrlInvOpen.put(player.getUniqueId(), Boolean.FALSE);
+            return;
+        }
 
         InventoryInfo info = pendingInventory.remove(player.getUniqueId());
         if (info == null) return;
@@ -309,6 +381,7 @@ public class PlayerRecorderListener implements Listener {
     public void onCraftItem(CraftItemEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         if (!shouldRecord(player)) return;
+        if (mineRLMode) return;
 
         ItemStack result = event.getRecipe().getResult();
         if (result.getType() == Material.AIR) return;
@@ -331,12 +404,41 @@ public class PlayerRecorderListener implements Listener {
         updateLastAction(player);
     }
 
+    // ─── Event: consume (eat / drink / potion) ──────────────────────────────────
+
+    /**
+     * Fires when a player finishes consuming an item (food, potion, milk bucket, etc.).
+     * This catches cases the tick recorder cannot: the exact item consumed and the moment
+     * it completes (e.g. golden apple, suspicious stew, potions).
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlayerItemConsume(PlayerItemConsumeEvent event) {
+        Player player = event.getPlayer();
+        if (!shouldRecord(player)) return;
+        if (mineRLMode) {
+            // Consuming an item requires holding use; set the flag.
+            mrlUse.put(player.getUniqueId(), Boolean.TRUE);
+            return;
+        }
+
+        double now = EpisodeWriter.nowSecs();
+        ObsSnapshot obs = ObsSnapshot.capture(player);
+        String itemName = event.getItem().getType().getKey().getKey();
+        String argsJson = "{\"item\":\"" + ObsSnapshot.jsonEscape(itemName) + "\",\"count\":1}";
+        String result   = "Consumed " + itemName + ".";
+
+        maybeWriteNavigate(player, obs, now);
+        writer.write("consume", argsJson, result, obs, now, EpisodeWriter.nowSecs());
+        updateLastAction(player);
+    }
+
     // ─── Event: say ───────────────────────────────────────────────────────────
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPlayerChat(AsyncPlayerChatEvent event) {
         Player player = event.getPlayer();
         if (!shouldRecord(player)) return;
+        if (mineRLMode) return;
 
         final String message = event.getMessage();
         final double now = EpisodeWriter.nowSecs();
@@ -354,6 +456,267 @@ public class PlayerRecorderListener implements Listener {
     }
 
     // ─── Combat timeout task ──────────────────────────────────────────────────
+
+    // ─── MineRL event flags ─────────────────────────────────────────────────────────
+
+    /** LMB held on a block. Sets {@code attack} flag for current tick window. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockDamage(BlockDamageEvent event) {
+        Player player = event.getPlayer();
+        if (!shouldRecord(player) || !mineRLMode) return;
+        mrlAttack.put(player.getUniqueId(), Boolean.TRUE);
+    }
+
+    /** Right-click on block / air. Sets {@code use} flag. */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerInteract(PlayerInteractEvent event) {
+        if (!(event.getPlayer() instanceof Player player)) return;
+        if (!shouldRecord(player) || !mineRLMode) return;
+        mrlUse.put(player.getUniqueId(), Boolean.TRUE);
+    }
+
+    /** Player presses Space. Sets {@code jump} flag. */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerJump(PlayerJumpEvent event) {
+        Player player = event.getPlayer();
+        if (!shouldRecord(player) || !mineRLMode) return;
+        mrlJump.put(player.getUniqueId(), Boolean.TRUE);
+    }
+
+    /** Player drops an item (Q). Sets {@code drop} flag. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlayerDropItem(PlayerDropItemEvent event) {
+        Player player = event.getPlayer();
+        if (!shouldRecord(player) || !mineRLMode) return;
+        mrlDrop.put(player.getUniqueId(), Boolean.TRUE);
+    }
+
+    /** Player presses F to swap main/off-hand. Sets {@code swapHands} flag. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlayerSwapHandItems(PlayerSwapHandItemsEvent event) {
+        Player player = event.getPlayer();
+        if (!shouldRecord(player) || !mineRLMode) return;
+        mrlSwapHands.put(player.getUniqueId(), Boolean.TRUE);
+    }
+
+    // ─── Player disconnect cleanup ────────────────────────────────────────────
+
+    /** Remove all per-player state when a player leaves to prevent memory leaks. */
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        UUID uid = event.getPlayer().getUniqueId();
+        pendingCombat.remove(uid);
+        pendingInventory.remove(uid);
+        lastActionLoc.remove(uid);
+        lastActionTime.remove(uid);
+        tickPrevLoc.remove(uid);
+        tickPrevHealth.remove(uid);
+        tickPrevFood.remove(uid);
+        mrlAttack.remove(uid);
+        mrlUse.remove(uid);
+        mrlJump.remove(uid);
+        mrlDrop.remove(uid);
+        mrlSwapHands.remove(uid);
+        mrlInvOpen.remove(uid);
+        mrlPrevYaw.remove(uid);
+        mrlPrevPitch.remove(uid);
+    }
+
+    // ─── Fixed-interval tick recorder (semantic) ───────────────────────────────
+
+    /**
+     * Every 10 server ticks (≈ 500 ms at 20 TPS), emit one action record per
+     * recorded player — unless an event-driven record was written very recently.
+     *
+     * <p>Label priority:
+     * <ol>
+     *   <li><b>navigate</b> — player moved &gt; 1 block since last tick
+     *   <li><b>take_damage</b> — health dropped ≥ 1.0 since last tick
+     *   <li><b>heal</b> — health increased ≥ 1.0 and food level unchanged
+     *   <li><b>idle</b> — nothing significant changed (obs snapshot only)
+     * </ol>
+     *
+     * <p>The tick fills the gaps between event-driven records so that every
+     * screenshot frame in the merged episode has a recent, accurate action.
+     */
+    private void startTickTask() {
+        new BukkitRunnable() {
+            @Override public void run() {
+                if (!isRecording() || mineRLMode) return;
+                double now = EpisodeWriter.nowSecs();
+                for (Player player : plugin.getServer().getOnlinePlayers()) {
+                    if (!shouldRecord(player)) continue;
+                    UUID uid = player.getUniqueId();
+                    // Skip if an event-driven record was written < 400 ms ago
+                    double lastWritten = lastActionTime.getOrDefault(uid, 0.0);
+                    if (now - lastWritten < 0.4) continue;
+                    writeTick(player, uid, now);
+                }
+            }
+        }.runTaskTimer(plugin, 10L, 10L); // 10 ticks = 500 ms
+    }
+
+    // ─── Fixed-interval tick recorder (MineRL) ──────────────────────────────
+
+    /**
+     * Every 10 server ticks (≈500 ms), emit one MineRL control-space record per
+     * recorded player.  Reads and clears the per-player event flags accumulated
+     * since the previous tick, then writes a {@code controls} dict together with
+     * the current obs snapshot.
+     *
+     * <p>Movement (forward/back/left/right) is inferred from the XZ position
+     * delta decomposed against the player’s current yaw.
+     * Camera (yaw/pitch) delta is tracked from the previous tick.
+     */
+    private void startMineRLTickTask() {
+        new BukkitRunnable() {
+            @Override public void run() {
+                if (!isRecording() || !mineRLMode) return;
+                double now = EpisodeWriter.nowSecs();
+                for (Player player : plugin.getServer().getOnlinePlayers()) {
+                    if (!shouldRecord(player)) continue;
+                    writeMineRLTick(player, player.getUniqueId(), now);
+                }
+            }
+        }.runTaskTimer(plugin, 10L, 10L); // 10 ticks = 500 ms
+    }
+
+    private void writeMineRLTick(Player player, UUID uid, double now) {
+        ObsSnapshot obs  = ObsSnapshot.capture(player);
+        Location    cur  = player.getLocation();
+        float       yaw  = cur.getYaw();
+        float       pitch = cur.getPitch();
+
+        // ─ Movement decomposition ───────────────────────────────────────
+        // Minecraft yaw: 0°=South(+Z), 90°=West(-X), −90°=East(+X), 180°=North(-Z)
+        // Forward unit vector in (X, Z): (-sin(yaw), cos(yaw))
+        // Strafe-right unit vector in (X, Z): (cos(yaw), sin(yaw))
+        Location prevLoc = tickPrevLoc.get(uid);
+        int forward = 0, back = 0, left = 0, right = 0;
+        if (prevLoc != null && prevLoc.getWorld() != null
+                && prevLoc.getWorld().equals(cur.getWorld())) {
+            double dx = cur.getX() - prevLoc.getX();
+            double dz = cur.getZ() - prevLoc.getZ();
+            double yawRad = Math.toRadians(yaw);
+            double fwdDot  = dx * -Math.sin(yawRad) + dz *  Math.cos(yawRad);
+            double rtDot   = dx *  Math.cos(yawRad) + dz *  Math.sin(yawRad);
+            if (fwdDot >  0.05) forward = 1;
+            if (fwdDot < -0.05) back    = 1;
+            if (rtDot  < -0.05) left    = 1;  // strafe left = rtDot negative
+            if (rtDot  >  0.05) right   = 1;
+        }
+
+        // ─ Camera delta ────────────────────────────────────────────────
+        float prevYaw   = mrlPrevYaw.getOrDefault(uid, yaw);
+        float prevPitch = mrlPrevPitch.getOrDefault(uid, pitch);
+        float deltaYaw  = yaw - prevYaw;
+        float deltaPitch = pitch - prevPitch;
+        // Wrap yaw delta to (-180, +180]
+        while (deltaYaw >  180f) deltaYaw -= 360f;
+        while (deltaYaw < -180f) deltaYaw += 360f;
+
+        // ─ Event flags (read + clear) ───────────────────────────────────
+        int attack    = Boolean.TRUE.equals(mrlAttack.remove(uid))    ? 1 : 0;
+        int use       = Boolean.TRUE.equals(mrlUse.remove(uid))       ? 1 : 0;
+        int jump      = Boolean.TRUE.equals(mrlJump.remove(uid))      ? 1 : 0;
+        int drop      = Boolean.TRUE.equals(mrlDrop.remove(uid))      ? 1 : 0;
+        int swapHands = Boolean.TRUE.equals(mrlSwapHands.remove(uid)) ? 1 : 0;
+        int inventory = Boolean.TRUE.equals(mrlInvOpen.get(uid))      ? 1 : 0;
+
+        // ─ Polled state ─────────────────────────────────────────────────
+        int sneak  = player.isSneaking()  ? 1 : 0;
+        int sprint = player.isSprinting() ? 1 : 0;
+        int slot   = player.getInventory().getHeldItemSlot(); // 0-8
+
+        // ─ Build hotbar one-hot ───────────────────────────────────────────
+        StringBuilder sb = new StringBuilder();
+        sb.append("{");
+        sb.append("\"ESC\":0");  // not observable
+        sb.append(",\"attack\":").append(attack);
+        sb.append(",\"back\":").append(back);
+        sb.append(",\"camera\":[")
+          .append(String.format("%.2f", deltaYaw)).append(",")
+          .append(String.format("%.2f", deltaPitch)).append("]");
+        sb.append(",\"drop\":").append(drop);
+        sb.append(",\"forward\":").append(forward);
+        for (int i = 1; i <= 9; i++) {
+            sb.append(",\"hotbar.").append(i).append("\": ").append(slot == i - 1 ? 1 : 0);
+        }
+        sb.append(",\"inventory\":").append(inventory);
+        sb.append(",\"jump\":").append(jump);
+        sb.append(",\"left\":").append(left);
+        sb.append(",\"pickItem\":0");  // not observable
+        sb.append(",\"right\":").append(right);
+        sb.append(",\"sneak\":").append(sneak);
+        sb.append(",\"sprint\":").append(sprint);
+        sb.append(",\"swapHands\":").append(swapHands);
+        sb.append(",\"use\":").append(use);
+        sb.append("}");
+
+        // Update baseline
+        tickPrevLoc.put(uid, cur.clone());
+        mrlPrevYaw.put(uid, yaw);
+        mrlPrevPitch.put(uid, pitch);
+
+        writer.writeMineRL(sb.toString(), obs, now);
+    }
+
+    private void writeTick(Player player, UUID uid, double now) {
+        ObsSnapshot obs = ObsSnapshot.capture(player);
+        Location cur    = player.getLocation();
+
+        Location prevLoc    = tickPrevLoc.get(uid);
+        double   prevHealth = tickPrevHealth.getOrDefault(uid, obs.health);
+        int      prevFood   = tickPrevFood.getOrDefault(uid, obs.hunger);
+
+        // Update baseline for next tick
+        tickPrevLoc.put(uid, cur.clone());
+        tickPrevHealth.put(uid, obs.health);
+        tickPrevFood.put(uid, obs.hunger);
+
+        String action;
+        String argsJson;
+        String result;
+
+        if (prevLoc != null && prevLoc.getWorld() != null
+                && prevLoc.getWorld().equals(cur.getWorld())) {
+            double dist        = prevLoc.distance(cur);
+            double healthDelta = obs.health - prevHealth;
+
+            if (dist > 1.0) {
+                String from = String.format("[%.2f,%.2f,%.2f]",
+                        prevLoc.getX(), prevLoc.getY(), prevLoc.getZ());
+                String to   = String.format("[%.2f,%.2f,%.2f]",
+                        cur.getX(), cur.getY(), cur.getZ());
+                argsJson = "{\"from\":" + from + ",\"to\":" + to
+                         + ",\"distance\":" + String.format("%.2f", dist) + "}";
+                result = String.format("Moved %.1f blocks to [%.0f,%.0f,%.0f].",
+                        dist, cur.getX(), cur.getY(), cur.getZ());
+                action = "navigate";
+            } else if (healthDelta <= -1.0) {
+                argsJson = String.format("{\"damage\":%.1f}", -healthDelta);
+                result   = String.format("Took %.1f damage.", -healthDelta);
+                action   = "take_damage";
+            } else if (healthDelta >= 1.0 && obs.hunger == prevFood) {
+                // Health recovered but food unchanged → regen / golden apple effect
+                argsJson = String.format("{\"amount\":%.1f}", healthDelta);
+                result   = String.format("Healed %.1f health.", healthDelta);
+                action   = "heal";
+            } else {
+                argsJson = "{}";
+                result   = "Idle.";
+                action   = "idle";
+            }
+        } else {
+            // First tick for this player (no previous location yet)
+            argsJson = "{}";
+            result   = "Idle.";
+            action   = "idle";
+        }
+
+        writer.write(action, argsJson, result, obs, now, EpisodeWriter.nowSecs());
+        updateLastAction(player);
+    }
 
     /**
      * Every 5 seconds, flush any combat states older than 15 seconds as partial
@@ -404,6 +767,19 @@ public class PlayerRecorderListener implements Listener {
         }
         // Pending inventory interactions are discarded on stop (incomplete session).
         pendingInventory.clear();
+        // Clear tick baseline state
+        tickPrevLoc.clear();
+        tickPrevHealth.clear();
+        tickPrevFood.clear();
+        // Clear MineRL flag maps
+        mrlAttack.clear();
+        mrlUse.clear();
+        mrlJump.clear();
+        mrlDrop.clear();
+        mrlSwapHands.clear();
+        mrlInvOpen.clear();
+        mrlPrevYaw.clear();
+        mrlPrevPitch.clear();
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────

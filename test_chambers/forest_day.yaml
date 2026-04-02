@@ -1,112 +1,128 @@
 # test_chambers/forest_day.yaml
-# Dense forest during daytime. Rich gathering environment with logs and leaves.
-# Good for resource-collection and survival scenarios.
+# Dense forest during daytime. Rich gathering environment with multi-layer
+# terrain, underground caves with ores, and peaceful surface mobs.
+# Designed for resource-collection, mining, and survival scenarios.
 
 name: forest_day
-description: "Dense forest in daylight — oak and birch trees, no mobs"
-seed: 101
+description: "Dense forest in daylight -- raised terrain, procedural caves with ores, peaceful mobs"
+spawn_point: [0, -55, 0]
 
 features:
   biome: minecraft:forest
   time: day
   weather: clear
-  difficulty: normal
-
-  trees:
-    - type: oak
-      count: [4, 7]
-      area: [-12, -63, -12, 12, -63, 12]
-
-    - type: birch
-      count: [2, 4]
-      area: [-11, -63, -11, 11, -63, 11]
-
-    - type: dark_oak
-      count: [1, 2]
-      area: [-8, -63, -8, 8, -63, 8]
-
-  # A few surface coal outcrops for resource-finding scenarios
-  ores:
-    - type: coal_ore
-      count: [3, 6]
-      area: [-10, -63, -10, 10, -63, 10]
-      replace: grass_block
+  difficulty: peaceful
 
   gamerule_overrides:
     doMobSpawning: "false"
 
-# (legacy rcon_cmds archived; no longer executed)
-_rcon_cmds_archive:
-  # --- Oak Tree 1 (3, -59, 3) ---
-  - "setblock 3 -59 3 oak_log"
-  - "setblock 3 -58 3 oak_log"
-  - "setblock 3 -57 3 oak_log"
-  - "setblock 3 -56 3 oak_log"
-  - "setblock 3 -55 3 oak_log"
-  # Leaves Canopy
-  - "setblock 3 -54 3 oak_leaves"
-  - "setblock 4 -54 3 oak_leaves"
-  - "setblock 2 -54 3 oak_leaves"
-  - "setblock 3 -54 4 oak_leaves"
-  - "setblock 3 -54 2 oak_leaves"
-  - "setblock 4 -54 4 oak_leaves"
-  - "setblock 2 -54 2 oak_leaves"
-  - "setblock 4 -54 2 oak_leaves"
-  - "setblock 2 -54 4 oak_leaves"
-  - "setblock 3 -53 3 oak_leaves"
-  - "setblock 4 -53 3 oak_leaves"
-  - "setblock 2 -53 3 oak_leaves"
-  - "setblock 3 -53 4 oak_leaves"
-  - "setblock 3 -53 2 oak_leaves"
-  - "setblock 3 -52 3 oak_leaves"
+  trees:
+    - type: oak
+      count: [5, 8]
+      area: [-14, -56, -14, 14, -56, 14]
 
-  # --- Birch Tree 1 (-3, -59, -3) ---
-  - "setblock -3 -59 -3 birch_log"
-  - "setblock -3 -58 -3 birch_log"
-  - "setblock -3 -57 -3 birch_log"
-  - "setblock -3 -56 -3 birch_log"
-  - "setblock -3 -55 -3 birch_log"
-  - "setblock -3 -54 -3 birch_log"
-  # Leaves Canopy (Birch are taller/thinner)
-  - "setblock -3 -53 -3 birch_leaves"
-  - "setblock -2 -53 -3 birch_leaves"
-  - "setblock -4 -53 -3 birch_leaves"
-  - "setblock -3 -53 -2 birch_leaves"
-  - "setblock -3 -53 -4 birch_leaves"
-  - "setblock -3 -52 -3 birch_leaves"
-  - "setblock -2 -52 -3 birch_leaves"
-  - "setblock -4 -52 -3 birch_leaves"
-  - "setblock -3 -52 -2 birch_leaves"
-  - "setblock -3 -52 -4 birch_leaves"
+    - type: birch
+      count: [3, 5]
+      area: [-12, -56, -12, 12, -56, 12]
 
-  # --- Oak Tree 2 (6, -59, -2) ---
-  - "setblock 6 -59 -2 oak_log"
-  - "setblock 6 -58 -2 oak_log"
-  - "setblock 6 -57 -2 oak_log"
-  - "setblock 6 -56 -2 oak_log"
-  - "setblock 6 -55 -2 oak_log"
-  # Leaves Canopy
-  - "setblock 6 -54 -2 oak_leaves"
-  - "setblock 7 -54 -2 oak_leaves"
-  - "setblock 5 -54 -2 oak_leaves"
-  - "setblock 6 -54 -1 oak_leaves"
-  - "setblock 6 -54 -3 oak_leaves"
-  - "setblock 7 -54 -1 oak_leaves"
-  - "setblock 5 -54 -3 oak_leaves"
-  - "setblock 7 -54 -3 oak_leaves"
-  - "setblock 5 -54 -1 oak_leaves"
-  - "setblock 6 -53 -2 oak_leaves"
-  - "setblock 7 -53 -2 oak_leaves"
-  - "setblock 5 -53 -2 oak_leaves"
-  - "setblock 6 -53 -1 oak_leaves"
-  - "setblock 6 -53 -3 oak_leaves"
-  - "setblock 6 -52 -2 oak_leaves"
+    - type: dark_oak
+      count: [1, 3]
+      area: [-10, -56, -10, 10, -56, 10]
 
-sim_state:
-  biomes: [forest, birch_forest, taiga, dark_forest]
-  y_range: [60, 80]
-  nearby_blocks: [oak_log, birch_log, dark_oak_log, oak_leaves, birch_leaves,
-                  stone, dirt, grass_block, gravel, coal_ore]
-  mob_count: 0
-  mob_pool: []
-  light_range: [10, 14]
+  caves:
+    area: [-14, -63, -14, 14, -58, 14]
+    tunnels: [2, 4]
+    tunnel_length: [20, 40]
+    branch_chance: 0.25
+    room_chance: 0.15
+    room_radius: [3, 4]
+    min_radius: 1
+    max_radius: 2
+    entrances:
+      - [0, -55, 5]
+      - [9, -55, 0]
+
+  ores:
+    # Deep stone layer -- placed after caves are carved, so ores appear
+    # on cave walls.  'replace: stone' ensures ores only go into solid rock.
+    - type: coal_ore
+      count: [10, 16]
+      area: [-14, -63, -14, 14, -59, 14]
+      vein_size: 3
+      replace: stone
+
+    - type: iron_ore
+      count: [5, 9]
+      area: [-12, -63, -12, 12, -60, 12]
+      vein_size: 2
+      replace: stone
+
+    - type: copper_ore
+      count: [3, 6]
+      area: [-12, -62, -12, 12, -59, 12]
+      vein_size: 2
+      replace: stone
+
+    - type: gold_ore
+      count: [1, 3]
+      area: [-8, -63, -8, 8, -62, 8]
+      vein_size: 1
+      replace: stone
+
+    - type: diamond_ore
+      count: [0, 1]
+      area: [-6, -63, -6, 6, -63, 6]
+      replace: stone
+
+    # Shallow dirt layer -- exposed coal outcrops
+    - type: coal_ore
+      count: [2, 4]
+      area: [-14, -58, -14, 14, -57, 14]
+      replace: dirt
+
+  mobs:
+    - type: cow
+      count: [2, 4]
+      area: [-13, -55, -13, 13, -55, 13]
+
+    - type: sheep
+      count: [2, 3]
+      area: [-13, -55, -13, 13, -55, 13]
+
+    - type: chicken
+      count: [3, 5]
+      area: [-11, -55, -11, 11, -55, 11]
+
+    - type: pig
+      count: [1, 3]
+      area: [-11, -55, -11, 11, -55, 11]
+
+  inventory:
+    mainhand: stone_pickaxe
+    items:
+      stone_pickaxe: 1
+
+  raw_cmds:
+    # -- Raised terrain (runs before caves/ores/mobs) --
+    # Stone from bedrock up to Y=-59
+    - "fill -32 -63 -32 32 -59 32 stone"
+    # Dirt topsoil layers
+    - "fill -32 -58 -32 32 -57 32 dirt"
+    # Grass surface at Y=-56
+    - "fill -32 -56 -32 32 -56 32 grass_block"
+
+    # -- Surface decoration --
+    # Wildflowers
+    - "setblock 3 -55 -6 poppy"
+    - "setblock -5 -55 8 dandelion"
+    - "setblock 7 -55 3 cornflower"
+    - "setblock -8 -55 -4 azure_bluet"
+    - "setblock -3 -55 -9 oxeye_daisy"
+    - "setblock 10 -55 -5 allium"
+    # Coarse dirt patches
+    - "fill 4 -56 -10 6 -56 -8 coarse_dirt"
+    - "fill -9 -56 5 -7 -56 7 coarse_dirt"
+    # Cobblestone boulder
+    - "setblock -6 -55 -2 mossy_cobblestone"
+    - "setblock -6 -56 -2 mossy_cobblestone"
+    - "setblock -7 -56 -2 cobblestone"

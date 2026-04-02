@@ -27,8 +27,9 @@ Each line in an episode file is one player action:
 
 ```
 minecraft_recorder/       Python CLI (chamber loader + RCON orchestration)
-  __main__.py             Entry point: start / validate / dump-tools
+  __main__.py             Entry point: start / validate / merge-visual / dump-tools
   episode_writer.py       iter_records() + validate_episode() utilities
+  screenshot_capture.py   Screenshot capture + syncer thread
   tool_definitions.py     JSON schemas for the 7 action primitives
 
 recorder_plugin/          Paper plugin (Java) — the authoritative recorder
@@ -38,22 +39,25 @@ recorder_plugin/          Paper plugin (Java) — the authoritative recorder
   src/…/ObsSnapshot.java      Player state capture
 
 minecraft_test_chambers/   Chamber definitions (Python generators)
-test_chambers/             YAML config files for each chamber
+test_chambers/             YAML config files for each chamber (22 scenarios)
 episodes/                  Recorded JSONL files (git-ignored)
 server/                    Paper 1.20.6 server files (git-ignored)
+minecraft_server.py        Server lifecycle + RCON client
+episode_viewer.html        Browser-based episode viewer (open locally)
 ```
 
 ## Setup
 
 ### Prerequisites
-- Java 21+, Python 3.12+, Maven 3.9+
+- Java 21+, Python 3.10+, Maven 3.9+
 - Paper 1.20.6 server (files in `server/`)
 
 ### Install
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -e .
+pip install -e ".[dev]"        # tests + linting
+pip install -e ".[recorder]"   # screenshot capture (macOS only, optional)
 ```
 
 ### Build & install the plugin
@@ -80,23 +84,28 @@ python -m minecraft_recorder start --chamber desert_tomb
 # Play in Minecraft, then Ctrl-C to stop.
 ```
 
+Optional flags:
+
+```bash
+python -m minecraft_recorder start --chamber desert_tomb \
+  --screenshots        \  # capture game-window frames alongside the episode
+  --format minerl      \  # record raw MineRL control space instead of semantic actions
+  --duration 120          # auto-stop after 120 seconds
+```
+
 ### Validate recordings
 
 ```bash
 python -m minecraft_recorder validate episodes/*.jsonl
 ```
 
-### Available chambers
+### Merge screenshot sidecar
 
-| Chamber | Description |
-|---|---|
-| `desert_tomb` | Underground tomb with husks, gold ore, and a trapped chest |
-| `plains_day` | Open plains, daytime |
-| `forest_day` | Dense forest, daytime |
-| `hostile_night` | Surface at night with hostile mobs |
-| `open_plains` | Flat plains, no mobs |
-| `rain_forest` | Rainfall, forest biome |
-| `deep_mine` | Deep mining scenario |
+```bash
+python -m minecraft_recorder merge-visual episodes/episode.jsonl
+```
+
+Combines the `_visual.jsonl` frames captured by `--screenshots` into the episode file as `image_b64` fields, writing a `_merged.jsonl` output.
 
 ### Add a chamber
 

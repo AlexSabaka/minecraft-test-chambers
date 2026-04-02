@@ -31,6 +31,7 @@ _REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
 from minecraft_recorder.episode_writer import validate_episode
+from minecraft_recorder.screenshot_capture import ScreenshotSyncer, merge_visual, _visual_path_for
 from minecraft_recorder.tool_definitions import tools_list_response
 
 # ─── Constants ────────────────────────────────────────────────────────────────
@@ -50,9 +51,13 @@ def cmd_start(args: argparse.Namespace) -> int:
         1. Load the chamber world via RCON  (mobs / structures / weather).
         2. Send  ``/recorder start <chamber> <seed>``  via RCON  →  plugin opens
            the JSONL file and begins capturing all server-side events.
-        3. Wait for Ctrl-C (or --duration seconds).
-        4. Send  ``/recorder stop``  via RCON  →  plugin flushes & closes the
+        3. (Optional) Start ScreenshotSyncer to tail the JSONL and grab a
+           screenshot after each action record (--screenshots flag).
+        4. Wait for Ctrl-C (or --duration seconds).
+        5. Send  ``/recorder stop``  via RCON  →  plugin flushes & closes the
            file.  The path is printed by the plugin to the server log.
+        6. (Optional) Auto-merge episode + visual sidecar into a single JSONL
+           with ``image_b64`` field per record (unless --no-merge).
 
     No Mineflayer bridge is needed: the plugin has authoritative access to
     inventory, held item, combat, chest interactions, position, and craft
@@ -71,6 +76,12 @@ def cmd_start(args: argparse.Namespace) -> int:
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
 
+    screenshots   = getattr(args, "screenshots", False)
+    no_merge      = getattr(args, "no_merge", False)
+    interval_ms   = getattr(args, "interval_ms", 500)
+    window_search = getattr(args, "window", "Minecraft")
+    rec_format    = getattr(args, "format", "semantic")
+
     if dry_run:
         if not args.skip_load:
             print(f"Loading chamber '{chamber}'… (dry-run)", file=sys.stderr)
@@ -84,66 +95,112 @@ def cmd_start(args: argparse.Namespace) -> int:
             if not result.success:
                 print(f"Chamber load failed: {result.errors}", file=sys.stderr)
                 return 1
-        print("[dry-run] Would send: /recorder start", chamber, seed, file=sys.stderr)
+        print(f"[dry-run] Would send: /recorder start {chamber} {seed} {rec_format}",
+              file=sys.stderr)
+        if screenshots:
+            print(f"[dry-run] Would start ScreenshotSyncer  interval={interval_ms}ms  "
+                  f"window={window_search!r}", file=sys.stderr)
         return 0
 
     # ── Open persistent RCON connection ──────────────────────────────────────
-    rcon_client = mod.RconClient(
-        host=RCON_HOST, port=RCON_PORT, password=RCON_PASSWORD
-    )
-    rcon_client.__enter__()
+    episode_path: Path | None = None
+    syncer: ScreenshotSyncer | None = None
 
-    try:
-        # ── (Optional) load the chamber ──────────────────────────────────────
-        if not args.skip_load:
-            print(f"Loading chamber '{chamber}'…", file=sys.stderr)
-            result = mod.load_chamber(
-                chamber,
-                rcon_fn=rcon_client.send,
-                seed_override=seed,
-                dry_run=False,
-                verbose=verbose,
-            )
-            if not result.success:
-                print(f"Chamber load failed: {result.errors}", file=sys.stderr)
-                return 1
-
-        # ── Tell the plugin to start recording ───────────────────────────────
-        plugin_resp = rcon_client.send(f"recorder start {chamber} {seed}")
-        if plugin_resp:
-            print(f"[plugin] {plugin_resp}", file=sys.stderr)
-        print(f"Recording started  chamber={chamber}  seed={seed}", file=sys.stderr)
-        print("Press Ctrl-C to stop recording.", file=sys.stderr)
-
-        # ── Wait for Ctrl-C (or optional --duration) ─────────────────────────
-        stop_event = threading.Event()
-
-        def _shutdown(signum, _frame):
-            print("\nStopping…", file=sys.stderr)
-            stop_event.set()
-
-        signal.signal(signal.SIGINT,  _shutdown)
-        signal.signal(signal.SIGTERM, _shutdown)
-
-        duration = getattr(args, "duration", None)
-        deadline = time.time() + duration if duration else None
-
-        while not stop_event.is_set():
-            if deadline and time.time() >= deadline:
-                break
-            time.sleep(0.25)
-
-    finally:
-        # ── Tell the plugin to stop & flush ──────────────────────────────────
+    with mod.RconClient(host=RCON_HOST, port=RCON_PORT, password=RCON_PASSWORD) as rcon_client:
         try:
-            stop_resp = rcon_client.send("recorder stop")
-            if stop_resp:
-                print(f"[plugin] {stop_resp}", file=sys.stderr)
-        except Exception as exc:  # noqa: BLE001
-            print(f"[recorder] Warning: could not send /recorder stop: {exc}",
+            # ── (Optional) load the chamber ──────────────────────────────────────
+            if not args.skip_load:
+                print(f"Loading chamber '{chamber}'…", file=sys.stderr)
+                result = mod.load_chamber(
+                    chamber,
+                    rcon_fn=rcon_client.send,
+                    seed_override=seed,
+                    dry_run=False,
+                    verbose=verbose,
+                )
+                if not result.success:
+                    print(f"Chamber load failed: {result.errors}", file=sys.stderr)
+                    return 1
+
+            # ── Tell the plugin to start recording ───────────────────────────────
+            plugin_resp = rcon_client.send(f"recorder start {chamber} {seed} {rec_format}")
+            if plugin_resp:
+                print(f"[plugin] {plugin_resp}", file=sys.stderr)
+            print(f"Recording started  chamber={chamber}  seed={seed}  format={rec_format}",
                   file=sys.stderr)
-        rcon_client.__exit__(None, None, None)
-        print("Episode saved (see server log for filename).", file=sys.stderr)
+
+            # ── Derive episode file path from plugin response ─────────────────────
+            # Plugin sends: "Recorder started: {filename}.jsonl [format]"
+            if plugin_resp and "Recorder started:" in plugin_resp:
+                raw_name = plugin_resp.split("Recorder started:", 1)[1].strip()
+                # Strip any trailing annotation like " [minerl]"
+                filename = raw_name.split(".jsonl")[0] + ".jsonl"
+                episode_path = (_REPO_ROOT / "episodes" / filename)
+
+            # ── (Optional) start screenshot syncer ───────────────────────────────
+            if screenshots:
+                if episode_path is None:
+                    print(
+                        "[screenshot] Warning: could not determine episode path from "
+                        "plugin response; screenshots disabled.",
+                        file=sys.stderr,
+                    )
+                else:
+                    syncer = ScreenshotSyncer(
+                        _visual_path_for(episode_path),
+                        interval_ms=interval_ms,
+                        window_search=window_search,
+                        verbose=verbose,
+                    )
+                    syncer.start()
+                    print(
+                        f"[screenshot] Syncer started  interval={interval_ms}ms  "
+                        f"window={window_search!r}  → {syncer.visual_path.name}",
+                        file=sys.stderr,
+                    )
+
+            print("Press Ctrl-C to stop recording.", file=sys.stderr)
+
+            # ── Wait for Ctrl-C (or optional --duration) ──────────────────────
+            stop_event = threading.Event()
+
+            def _shutdown(signum, _frame):
+                print("\nStopping…", file=sys.stderr)
+                stop_event.set()
+
+            signal.signal(signal.SIGINT,  _shutdown)
+            signal.signal(signal.SIGTERM, _shutdown)
+
+            deadline = time.time() + args.duration if args.duration else None
+
+            while not stop_event.is_set():
+                if deadline and time.time() >= deadline:
+                    break
+                time.sleep(0.25)
+
+        finally:
+            # ── Stop screenshot syncer before telling plugin to stop ──────────
+            if syncer is not None:
+                syncer.stop()
+                print("[screenshot] Syncer stopped.", file=sys.stderr)
+
+            # ── Tell the plugin to stop & flush ──────────────────────────────
+            try:
+                stop_resp = rcon_client.send("recorder stop")
+                if stop_resp:
+                    print(f"[plugin] {stop_resp}", file=sys.stderr)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[recorder] Warning: could not send /recorder stop: {exc}",
+                      file=sys.stderr)
+            print("Episode saved (see server log for filename).", file=sys.stderr)
+
+    # ── Auto-merge screenshots into episode JSONL (RCON no longer needed) ────
+    if syncer is not None and episode_path is not None and not no_merge:
+        try:
+            merged = merge_visual(episode_path, overwrite=True)
+            print(f"[screenshot] Merged → {merged.name}", file=sys.stderr)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[screenshot] Warning: merge failed: {exc}", file=sys.stderr)
 
     return 0
 
@@ -178,6 +235,48 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return rc
 
 
+# ─── Subcommand: merge-visual ─────────────────────────────────────────────────
+
+def cmd_merge_visual(args: argparse.Namespace) -> int:
+    """
+    Merge a ``_visual.jsonl`` sidecar into its episode JSONL file, adding an
+    ``"image_b64"`` field to each record.
+
+    Example::
+
+        python -m minecraft_recorder merge-visual episodes/desert_tomb_0_...jsonl
+    """
+    episode_path = Path(args.episode)
+    visual_path  = Path(args.visual) if args.visual else None
+    out_path     = Path(args.out)    if args.out    else None
+
+    if not episode_path.exists():
+        print(f"Error: episode file not found: {episode_path}", file=sys.stderr)
+        return 1
+
+    resolved_visual = visual_path or _visual_path_for(episode_path)
+    if not resolved_visual.exists():
+        print(f"Error: visual sidecar not found: {resolved_visual}", file=sys.stderr)
+        return 1
+
+    try:
+        merged = merge_visual(
+            episode_path,
+            visual_path=visual_path,
+            out_path=out_path,
+            overwrite=args.overwrite,
+        )
+        print(f"Merged → {merged}")
+    except FileExistsError as exc:
+        print(f"Error: {exc}  (use --overwrite to replace)", file=sys.stderr)
+        return 1
+    except Exception as exc:  # noqa: BLE001
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    return 0
+
+
 def _count_lines(path: Path) -> int:
     try:
         return sum(1 for line in path.open() if line.strip())
@@ -209,11 +308,42 @@ def build_parser() -> argparse.ArgumentParser:
                          help="Print sample records; don't connect to server")
     p_start.add_argument("--skip-load", action="store_true",
                          help="Don't call load-chamber; assume it's already loaded")
+    p_start.add_argument("--screenshots", action="store_true",
+                         help="Capture game-window screenshots on a fixed timer "
+                              "and save alongside the episode")
+    p_start.add_argument("--interval", dest="interval_ms", type=int, default=500,
+                         metavar="MS",
+                         help="Screenshot interval in milliseconds (default 500)")
+    p_start.add_argument("--window", default="Minecraft", metavar="TITLE",
+                         help="Window title/owner substring to capture on macOS "
+                              "(default 'Minecraft'; pass '' for full-screen)")
+    p_start.add_argument("--no-merge", action="store_true",
+                         help="With --screenshots: keep sidecar _visual.jsonl "
+                              "but skip auto-merging into _merged.jsonl")
+    p_start.add_argument("--format", dest="format", default="semantic",
+                         choices=["semantic", "minerl"],
+                         help="Recording schema: 'semantic' (default, Holy-7 action primitives) "
+                              "or 'minerl' (raw MineRL control-space per 500 ms tick)")
+    p_start.add_argument("--duration", type=float, default=None, metavar="SECONDS",
+                         help="Auto-stop after N seconds (default: wait for Ctrl-C)")
     p_start.add_argument("--verbose", action="store_true")
 
     # validate
     p_val = sub.add_parser("validate", help="Validate JSONL episode files")
     p_val.add_argument("files", nargs="+", help="JSONL file paths or glob patterns")
+
+    # merge-visual
+    p_merge = sub.add_parser(
+        "merge-visual",
+        help="Merge a _visual.jsonl sidecar into its episode file (adds image_b64)",
+    )
+    p_merge.add_argument("episode", help="Episode JSONL file")
+    p_merge.add_argument("--visual",    default=None,
+                         help="Visual sidecar JSONL (default: {episode_stem}_visual.jsonl)")
+    p_merge.add_argument("--out",       default=None,
+                         help="Output path (default: {episode_stem}_merged.jsonl)")
+    p_merge.add_argument("--overwrite", action="store_true",
+                         help="Overwrite existing output file")
 
     # dump-tools
     sub.add_parser("dump-tools", help="Print MCP tools/list JSON to stdout")
@@ -228,9 +358,10 @@ def main(argv: list[str] | None = None) -> int:
     args   = parser.parse_args(argv)
 
     dispatch = {
-        "start":      cmd_start,
-        "validate":   cmd_validate,
-        "dump-tools": cmd_dump_tools,
+        "start":        cmd_start,
+        "validate":     cmd_validate,
+        "merge-visual": cmd_merge_visual,
+        "dump-tools":   cmd_dump_tools,
     }
     return dispatch[args.subcommand](args)
 

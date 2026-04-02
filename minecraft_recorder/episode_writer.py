@@ -43,20 +43,39 @@ def validate_episode(path: Path) -> list[str]:
     """
     Validate all records in a JSONL episode file against the tool schemas.
 
+    For MineRL-format files (records contain a ``"controls"`` key instead of
+    ``"action"``), validates that each record has both ``"controls"`` and
+    ``"obs"`` keys and returns early without checking semantic action names.
+
     Returns a list of error strings (empty = all OK).
     """
     from .tool_definitions import TOOLS_BY_NAME
 
     errors: list[str] = []
     for i, record in enumerate(iter_records(path)):
+        if "controls" in record:
+            # MineRL format — validate controls + obs presence per record
+            _validate_minerl_record(i, record, errors)
+            continue
+
+        # Semantic format
         name = record.get("action", "")
         if name not in TOOLS_BY_NAME:
             errors.append(f"Record {i}: unknown action '{name}'")
             continue
         args   = record.get("args", {})
         schema = TOOLS_BY_NAME[name].input_schema
-        # Lightweight required-field check without jsonschema dep.
         for req in schema.get("required", []):
             if req not in args:
                 errors.append(f"Record {i} action={name}: missing required arg '{req}'")
     return errors
+
+
+def _validate_minerl_record(i: int, record: dict, errors: list[str]) -> None:
+    """Lightweight per-record check for MineRL-format episodes."""
+    if "controls" not in record:
+        errors.append(f"Record {i}: MineRL record missing 'controls' field")
+    if "obs" not in record:
+        errors.append(f"Record {i}: MineRL record missing 'obs' field")
+    if "ts_end" not in record:
+        errors.append(f"Record {i}: MineRL record missing 'ts_end' field")

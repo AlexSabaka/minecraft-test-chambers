@@ -9,9 +9,11 @@ Tests verify:
 from __future__ import annotations
 
 import random
+from typing import Any
 import pytest
 
 from minecraft_test_chambers.generators.base import FeatureGenerator
+from minecraft_test_chambers.generators.cave import CaveGenerator
 from minecraft_test_chambers.generators.chamber_room import ChamberRoomGenerator
 from minecraft_test_chambers.generators.environment import EnvironmentGenerator
 from minecraft_test_chambers.generators.mob import MobGenerator
@@ -380,3 +382,134 @@ def test_mob_determinism() -> None:
     cmds_a = MobGenerator(cfg, make_rng(55)).generate()
     cmds_b = MobGenerator(cfg, make_rng(55)).generate()
     assert cmds_a == cmds_b
+
+
+def test_cave_determinism() -> None:
+    cfg = {"caves": {
+        "area": [-14, -63, -14, 14, -58, 14],
+        "tunnels": [2, 3], "tunnel_length": [10, 20],
+    }}
+    cmds_a = CaveGenerator(cfg, make_rng(99)).generate()
+    cmds_b = CaveGenerator(cfg, make_rng(99)).generate()
+    assert cmds_a == cmds_b
+
+
+# ─── CaveGenerator ────────────────────────────────────────────────────────────
+
+def _cave_cfg(**overrides: Any) -> dict:
+    base = {
+        "caves": {
+            "area": [-14, -63, -14, 14, -58, 14],
+            "tunnels": 2,
+            "tunnel_length": 15,
+            "branch_chance": 0.0,
+            "room_chance": 0.0,
+            "min_radius": 1,
+            "max_radius": 1,
+        }
+    }
+    base["caves"].update(overrides)
+    return base
+
+
+def test_cave_basic_generates_fill_air() -> None:
+    cmds = CaveGenerator(_cave_cfg(), make_rng()).generate()
+    assert len(cmds) > 0
+    assert all("fill" in c and "air" in c for c in cmds)
+
+
+def test_cave_respects_area_bounds() -> None:
+    area = [-10, -63, -10, 10, -58, 10]
+    cmds = CaveGenerator(_cave_cfg(area=area), make_rng()).generate()
+    for cmd in cmds:
+        parts = cmd.split()
+        # fill x1 y1 z1 x2 y2 z2 air
+        x1, y1, z1, x2, y2, z2 = (int(p) for p in parts[1:7])
+        assert x1 >= -10 and x2 <= 10
+        assert y1 >= -63 and y2 <= -58
+        assert z1 >= -10 and z2 <= 10
+
+
+def test_cave_no_config_returns_empty() -> None:
+    cmds = CaveGenerator({}, make_rng()).generate()
+    assert cmds == []
+
+
+def test_cave_zero_tunnels() -> None:
+    cmds = CaveGenerator(_cave_cfg(tunnels=0), make_rng()).generate()
+    assert cmds == []
+
+
+def test_cave_with_rooms() -> None:
+    """Room chance = 1.0 should produce at least some radius >= room_radius."""
+    cfg = _cave_cfg(room_chance=1.0, room_radius=3, min_radius=1, max_radius=1)
+    cmds = CaveGenerator(cfg, make_rng()).generate()
+    # With rooms, some fill commands should span > 3-wide (radius 3 → 7-wide box)
+    wider = [c for c in cmds if _fill_span(c) >= 5]
+    assert wider, "Expected room-sized fill commands"
+
+
+def test_cave_with_entrances() -> None:
+    """Entrance shafts should produce fills above the cave area."""
+    cfg = _cave_cfg(tunnels=0, entrances=[[0, -55, 5]])
+    cfg["caves"]["area"] = [-14, -63, -14, 14, -58, 14]
+    cmds = CaveGenerator(cfg, make_rng()).generate()
+    assert len(cmds) > 0
+    # Entrances carve from area top (-58) up to surface (-55)
+    assert any("-55" in c for c in cmds)
+
+
+def test_cave_branching_produces_more_commands() -> None:
+    """Branches should generate more carved regions than no branches."""
+    cmds_no_branch = CaveGenerator(
+        _cave_cfg(tunnels=1, tunnel_length=20, branch_chance=0.0),
+        make_rng(42),
+    ).generate()
+    cmds_branch = CaveGenerator(
+        _cave_cfg(tunnels=1, tunnel_length=20, branch_chance=1.0),
+        make_rng(42),
+    ).generate()
+    assert len(cmds_branch) >= len(cmds_no_branch)
+
+
+def _fill_span(cmd: str) -> int:
+    """Return the maximum axis-span of a fill command."""
+    parts = cmd.split()
+    x1, y1, z1, x2, y2, z2 = (int(p) for p in parts[1:7])
+    return max(x2 - x1, y2 - y1, z2 - z1) + 1
+
+
+# ─── MobGenerator (passive-on-peaceful) ──────────────────────────────────────
+
+def test_mob_passive_on_peaceful() -> None:
+    """Passive mobs (cow, sheep, etc.) should still spawn on peaceful."""
+    cfg = {"mobs": [
+        {"type": "cow", "count": 2, "area": [-5, -55, -5, 5, -55, 5]},
+        {"type": "sheep", "count": 1, "area": [-5, -55, -5, 5, -55, 5]},
+    ]}
+    cmds = MobGenerator(cfg, make_rng(), difficulty="peaceful").generate()
+    assert len(cmds) == 3
+    assert sum("cow" in c for c in cmds) == 2
+    assert sum("sheep" in c for c in cmds) == 1
+
+
+def test_mob_hostile_skipped_on_peaceful() -> None:
+    """Hostile mobs must NOT spawn on peaceful."""
+    cfg = {"mobs": [
+        {"type": "zombie", "count": 3, "area": [-5, -62, -5, 5, -62, 5]},
+        {"type": "skeleton", "count": 2, "area": [-5, -62, -5, 5, -62, 5]},
+    ]}
+    cmds = MobGenerator(cfg, make_rng(), difficulty="peaceful").generate()
+    assert cmds == []
+
+
+def test_mob_mixed_peaceful_filters_hostile_only() -> None:
+    """Mixed mob list on peaceful: passive survive, hostile are dropped."""
+    cfg = {"mobs": [
+        {"type": "zombie", "count": 2, "area": [-5, -62, -5, 5, -62, 5]},
+        {"type": "chicken", "count": 3, "area": [-5, -55, -5, 5, -55, 5]},
+    ]}
+    cmds = MobGenerator(cfg, make_rng(), difficulty="peaceful").generate()
+    assert len(cmds) == 3
+    assert all("chicken" in c for c in cmds)
+    assert not any("zombie" in c for c in cmds)
