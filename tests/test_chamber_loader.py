@@ -367,11 +367,7 @@ def test_caves_run_before_ores() -> None:
 
 def test_rcon_client_reuses_socket() -> None:
     """RconClient must open exactly one TCP connection regardless of command count."""
-    import sys
-    import os
-    # Ensure the repo root (where minecraft_server.py lives) is importable
-    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-    from minecraft_server import RconClient  # noqa: PLC0415
+    from minecraft_recorder.server import RconClient  # noqa: PLC0415
 
     auth_response = b"\x0a\x00\x00\x00" + b"\x01\x00\x00\x00" + b"\x00\x00\x00\x00" + b"\x00\x00"
     cmd_response  = b"\x0a\x00\x00\x00" + b"\x01\x00\x00\x00" + b"\x00\x00\x00\x00" + b"\x00\x00"

@@ -1,11 +1,47 @@
 [project]
 name = "minecraft-test-chambers"
-version = "0.1.0"
-description = "Minecraft Portal-inspired test chamber generator"
+version = "0.2.0"
+description = "Procedurally-generated Minecraft test chambers for recording human playthroughs as JSONL training data for LLM fine-tuning"
+readme = "README.md"
 requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Oleksii Sabaka", email = "alex.love.broadcast@gmail.com"},
+]
+keywords = [
+    "minecraft",
+    "reinforcement-learning",
+    "dataset",
+    "recording",
+    "procedural-generation",
+    "llm",
+    "fine-tuning",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Games/Entertainment",
+]
 dependencies = [
     "pyyaml>=6.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/AlexSabaka/minecraft-test-chambers"
+
+[project.scripts]
+minecraft-recorder = "minecraft_recorder.__main__:main"
+minecraft-server   = "minecraft_recorder.server:main"
 
 [project.optional-dependencies]
 dev = [
@@ -23,6 +59,13 @@ recorder = [
 
 [tool.setuptools.packages.find]
 include = ["minecraft_test_chambers*", "minecraft_recorder*"]
+
+[tool.setuptools.package-data]
+minecraft_test_chambers = ["chambers/*.yaml"]
+minecraft_recorder      = ["world_config.yaml", "episode_viewer.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [build-system]
 requires = ["setuptools>=68.0"]

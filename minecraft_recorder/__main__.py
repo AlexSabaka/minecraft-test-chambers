@@ -3,18 +3,21 @@ Recorder CLI — orchestrate test-chamber recordings.
 
 Subcommands
 -----------
-start       Load a chamber then delegate recording to RecorderPlugin.
-validate    Validate JSONL episode files against the action schema.
-dump-tools  Print the MCP tools/list JSON to stdout.
+start        Load a chamber then delegate recording to RecorderPlugin.
+validate     Validate JSONL episode files against the action schema.
+aggregate    Merge consecutive navigate records in a JSONL episode.
+merge-visual Merge screenshot sidecar into episode (adds image_b64).
+viewer       Open the episode viewer HTML in the default browser.
+dump-tools   Print the MCP tools/list JSON to stdout.
 
 Usage::
 
-    python -m minecraft_recorder start --chamber plains_day
-    python -m minecraft_recorder start --chamber hostile_night --seed 42
+    minecraft-recorder start --chamber plains_day
+    minecraft-recorder start --chamber hostile_night --seed 42
 
-    python -m minecraft_recorder validate episodes/*.jsonl
-
-    python -m minecraft_recorder dump-tools
+    minecraft-recorder validate episodes/*.jsonl
+    minecraft-recorder aggregate episodes/foo.jsonl
+    minecraft-recorder viewer
 """
 from __future__ import annotations
 
@@ -24,15 +27,14 @@ import signal
 import sys
 import threading
 import time
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
-
-# Allow running as `python -m minecraft_recorder` from repo root.
-_REPO_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(_REPO_ROOT))
 
 from minecraft_recorder.episode_writer import validate_episode
 from minecraft_recorder.screenshot_capture import ScreenshotSyncer, merge_visual, _visual_path_for
+from minecraft_recorder.server import RconClient
 from minecraft_recorder.tool_definitions import tools_list_response
+from minecraft_test_chambers.chamber_loader import load_chamber
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -68,14 +70,6 @@ def cmd_start(args: argparse.Namespace) -> int:
     dry_run = args.dry_run
     verbose = args.verbose
 
-    # Import RconClient from minecraft_server.py.
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "minecraft_server", str(_REPO_ROOT / "minecraft_server.py")
-    )
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-
     screenshots   = getattr(args, "screenshots", False)
     no_merge      = getattr(args, "no_merge", False)
     interval_ms   = getattr(args, "interval_ms", 500)
@@ -85,7 +79,7 @@ def cmd_start(args: argparse.Namespace) -> int:
     if dry_run:
         if not args.skip_load:
             print(f"Loading chamber '{chamber}'… (dry-run)", file=sys.stderr)
-            result = mod.load_chamber(
+            result = load_chamber(
                 chamber,
                 rcon_fn=lambda _: "(dry-run)",
                 seed_override=seed,
@@ -106,12 +100,12 @@ def cmd_start(args: argparse.Namespace) -> int:
     episode_path: Path | None = None
     syncer: ScreenshotSyncer | None = None
 
-    with mod.RconClient(host=RCON_HOST, port=RCON_PORT, password=RCON_PASSWORD) as rcon_client:
+    with RconClient(host=RCON_HOST, port=RCON_PORT, password=RCON_PASSWORD) as rcon_client:
         try:
             # ── (Optional) load the chamber ──────────────────────────────────────
             if not args.skip_load:
                 print(f"Loading chamber '{chamber}'…", file=sys.stderr)
-                result = mod.load_chamber(
+                result = load_chamber(
                     chamber,
                     rcon_fn=rcon_client.send,
                     seed_override=seed,
@@ -135,7 +129,7 @@ def cmd_start(args: argparse.Namespace) -> int:
                 raw_name = plugin_resp.split("Recorder started:", 1)[1].strip()
                 # Strip any trailing annotation like " [minerl]"
                 filename = raw_name.split(".jsonl")[0] + ".jsonl"
-                episode_path = (_REPO_ROOT / "episodes" / filename)
+                episode_path = (Path.cwd() / "episodes" / filename)
 
             # ── (Optional) start screenshot syncer ───────────────────────────────
             if screenshots:
@@ -300,6 +294,19 @@ def cmd_dump_tools(_args: argparse.Namespace) -> int:
     return 0
 
 
+# ─── Subcommand: viewer ───────────────────────────────────────────────────────
+
+def cmd_viewer(_args: argparse.Namespace) -> int:
+    """Open the bundled episode_viewer.html in the default browser."""
+    import webbrowser
+    from importlib.resources import as_file, files
+    viewer_ref = files("minecraft_recorder").joinpath("episode_viewer.html")
+    with as_file(viewer_ref) as viewer_path:
+        webbrowser.open(viewer_path.as_uri())
+        print(f"Opened: {viewer_path}", file=sys.stderr)
+    return 0
+
+
 # ─── Subcommand: aggregate ────────────────────────────────────────────────────
 
 def cmd_aggregate(args: argparse.Namespace) -> int:
@@ -313,9 +320,14 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="python -m minecraft_recorder",
+        prog="minecraft-recorder",
         description="Minecraft playthrough recorder → JSONL training data",
     )
+    try:
+        _version = _pkg_version("minecraft-test-chambers")
+    except Exception:  # noqa: BLE001
+        _version = "unknown"
+    parser.add_argument("--version", action="version", version=f"%(prog)s {_version}")
     sub = parser.add_subparsers(dest="subcommand", required=True)
 
     # start
@@ -368,6 +380,9 @@ def build_parser() -> argparse.ArgumentParser:
     # dump-tools
     sub.add_parser("dump-tools", help="Print MCP tools/list JSON to stdout")
 
+    # viewer
+    sub.add_parser("viewer", help="Open episode viewer HTML in default browser")
+
     # aggregate
     p_agg = sub.add_parser("aggregate",
                             help="Merge consecutive navigate records in a JSONL episode")
@@ -388,6 +403,7 @@ def main(argv: list[str] | None = None) -> int:
         "merge-visual": cmd_merge_visual,
         "dump-tools":   cmd_dump_tools,
         "aggregate":    cmd_aggregate,
+        "viewer":       cmd_viewer,
     }
     return dispatch[args.subcommand](args)
 

@@ -5,42 +5,51 @@ Procedurally-generated Minecraft test chambers → flat JSONL training data for 
 ## Commands
 
 ```bash
-# Python env
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"        # tests + linting
-pip install -e ".[recorder]"   # screenshot capture (macOS/Windows/Linux)
+# Install
+pip install minecraft-test-chambers            # from PyPI
+pip install -e ".[dev]"                        # editable dev install (tests + linting)
+pip install -e ".[recorder]"                   # screenshot capture (macOS/Windows/Linux)
+uvx minecraft-test-chambers --help            # run without installing
 
 # Tests & linting
 python -m pytest tests/ -x -q
-ruff check .                   # line-length 100, target py310
+ruff check .                                   # line-length 100, target py310
 
-# Java plugin
+# Java plugin (must be built separately — not distributed via PyPI)
 cd recorder_plugin && mvn package -q
 cp target/RecorderPlugin.jar ../server/plugins/
 
-# Server
-cd server && java -Xmx2G -jar paper-1.20.6-151.jar --nogui
+# Server lifecycle (server/ dir created in CWD)
+minecraft-server setup          # download Paper JAR + verify config
+minecraft-server start          # start server; applies world_config.yaml defaults via RCON
+minecraft-server stop
+minecraft-server status
 
 # Record a session
-python -m minecraft_recorder start --chamber desert_tomb
-python -m minecraft_recorder start --chamber hostile_night --seed 42 --duration 120
-python -m minecraft_recorder start --chamber desert_tomb --screenshots --aggregate
+minecraft-recorder start --chamber desert_tomb
+minecraft-recorder start --chamber hostile_night --seed 42 --duration 120
+minecraft-recorder start --chamber desert_tomb --screenshots --aggregate
 
 # Post-processing
-python -m minecraft_recorder validate episodes/*.jsonl
-python -m minecraft_recorder aggregate episodes/foo.jsonl
-python -m minecraft_recorder merge-visual episodes/foo.jsonl
-python -m minecraft_recorder dump-tools
+minecraft-recorder validate episodes/*.jsonl
+minecraft-recorder aggregate episodes/foo.jsonl
+minecraft-recorder merge-visual episodes/foo.jsonl
+minecraft-recorder viewer       # open bundled episode_viewer.html in browser
+minecraft-recorder dump-tools
+minecraft-recorder --version
 ```
 
 ## Architecture
 
 ```
 minecraft_recorder/           Python CLI — session lifecycle, RCON orchestration
-  __main__.py                 Entry: start / validate / aggregate / merge-visual / dump-tools
+  __main__.py                 Entry: start / validate / aggregate / merge-visual / viewer / dump-tools
+  server.py                   Server lifecycle + RconClient (was minecraft_server.py)
   episode_writer.py           iter_records(), validate_episode(), aggregate_episode()
   screenshot_capture.py       ScreenshotSyncer + merge_visual() — macOS/Windows/Linux
   tool_definitions.py         JSON schemas for the 7 Holy action primitives
+  world_config.yaml           Default gamerules + worldborder applied on server start
+  episode_viewer.html         Bundled browser-based episode viewer
 
 recorder_plugin/              Paper 1.20.6 Bukkit plugin — authoritative recorder (Java)
   PlayerRecorderListener.java All event handlers + GatherPool accumulator
@@ -51,23 +60,27 @@ recorder_plugin/              Paper 1.20.6 Bukkit plugin — authoritative recor
 minecraft_test_chambers/      Chamber generation (Python)
   generators/                 One class per feature type; all extend FeatureGenerator
   chamber_loader.py           YAML → RCON command list; calls generators in fixed order
+  chambers/                   22 YAML chamber scenarios (bundled package data)
 
-test_chambers/                22 YAML chamber scenarios
-episodes/                     Output JSONL (git-ignored)
-server/                       Paper server files (git-ignored)
+episodes/                     Output JSONL written to CWD/episodes/ (git-ignored)
+server/                       Paper server files in CWD/server/ (git-ignored)
 ```
 
-**Data flow:** `test_chambers/*.yaml` → `chamber_loader.load_chamber()` → RCON → Paper server → `episodes/*.jsonl`
+**Data flow:** `minecraft_test_chambers/chambers/*.yaml` → `chamber_loader.load_chamber()` → RCON → Paper server → `CWD/episodes/*.jsonl`
 
 **Python is orchestration only.** All action recording happens server-side in the Java plugin.
 
-## Key Constants (hardcoded in `__main__.py`)
+## Key Constants
+
+Defined in both `__main__.py` and `minecraft_recorder/server.py`:
 
 ```python
 RCON_HOST     = "127.0.0.1"
 RCON_PORT     = 25575
 RCON_PASSWORD = "minecraft_dev"
 ```
+
+`RconClient` lives in `minecraft_recorder/server.py` and is imported by `__main__.py` — do not duplicate it.
 
 ## Episode / Action Schema
 
@@ -142,13 +155,16 @@ MineRL `attack` field is an **integer count** (not binary) — reflects actual c
 ## Gotchas
 
 - **YAML filename must match `name:` field** — `list_chambers()` uses `Path.stem`. A mismatch loads under the wrong name silently.
+- **Chamber YAMLs are in `minecraft_test_chambers/chambers/`** — not the repo root. `chamber_loader._CHAMBERS_DIR` uses `Path(__file__).parent / "chambers"`.
 - **`ObsSnapshot.capture()` is main-thread-only** — never call from async event handlers; schedule via `runTask()`.
+- **Episodes write to `Path.cwd() / "episodes"`** — the plugin writes there; Python derives the path from the plugin's RCON response. Running `minecraft-recorder` from different directories gives different episode locations.
+- **`server/` is also CWD-relative** — `minecraft-server setup/start/stop` create and manage `./server/` in the working directory. Run from the project root.
 - `episodes/` and `server/` are **git-ignored** — don't reference local server files in tests or assertions.
 - Screenshot capture (`--screenshots`) uses game-window isolation on macOS (Quartz), Windows (pywin32), and Linux/X11 (xdotool). Falls back to full-screen on Wayland and when the window can't be found. Linux requires system package: `apt install xdotool` / `pacman -S xdotool`.
 - **No batching in EpisodeWriter** — each record is flushed immediately to disk (`writer.flush()` after every write).
 - Passive mobs (cow, sheep) spawn even on `peaceful`; hostile mobs are skipped.
 - NBT in YAML: use 1.20.6-style lowercase `attributes:` / `minecraft:generic.max_health` (not legacy `Attributes:`).
-- `validate_episode()` now checks for **temporal gaps > 2 s** between consecutive records and reports them as errors.
+- `validate_episode()` checks for **temporal gaps > 2 s** between consecutive records and reports them as errors.
 
 ## Testing
 
@@ -159,4 +175,5 @@ python -m pytest tests/ -x -q   # 84 tests; always pass before committing
 - Fixed seed `FIXED_SEED = 42` everywhere — never use `random.random()` directly in tests.
 - Generator tests: config dict + `make_rng()` → `.generate()` → assert on `list[str]`.
 - Loader tests: `_noop_rcon` for dry runs, `MagicMock` for call-count assertions.
+- `RconClient` imported from `minecraft_recorder.server` — not from `minecraft_server` (file moved).
 - No tests for episode recording pipeline (EpisodeWriter, PlayerRecorderListener) — Java-side only.

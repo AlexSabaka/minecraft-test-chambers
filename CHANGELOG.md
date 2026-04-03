@@ -4,7 +4,7 @@ All notable changes to this project are documented here.
 
 ---
 
-## [Unreleased] — 2026-04-03
+## [0.2.0] — 2026-04-03 — Distribution & packaging
 
 ### Added
 
@@ -35,6 +35,32 @@ All notable changes to this project are documented here.
   Window-specific capture now works on all three platforms. macOS continues to use Quartz + `screencapture -l` (unchanged). Windows uses `win32gui.EnumWindows` to locate the game HWND and `mss` region capture; requires `pywin32` (now included in `.[recorder]`). Linux/X11 uses `xdotool search --name` + `xdotool getwindowgeometry` to get the window rect, then `mss` region capture; requires the `xdotool` system package (`apt install xdotool` / `pacman -S xdotool`). Wayland detects `XDG_SESSION_TYPE=wayland` and silently falls back to full-screen `mss` capture. All paths converge on `_grab_full_screen_png_bytes()` on any failure. `ScreenshotSyncer` keeps the macOS CGWindowNumber cache path unchanged and delegates to `_grab_png_bytes()` for Windows/Linux.
 
 - **`CHANGELOG.md`**, **`README.md`** — documented all changes; README now includes a platform support table for `--screenshots`.
+
+### Changed — distribution & packaging
+
+- **Package restructured for PyPI / `uvx` distribution** (`pyproject.toml`, multiple files)
+  Five blocking issues prevented the package from functioning after a pip install. All resolved:
+
+  | File move | Reason |
+  |-----------|--------|
+  | `test_chambers/` → `minecraft_test_chambers/chambers/` | Must be inside a package to ship as package data |
+  | `minecraft_server.py` → `minecraft_recorder/server.py` | Was dynamically loaded via `importlib.util`; now a proper importable module |
+  | `world_config.yaml` → `minecraft_recorder/world_config.yaml` | Must be co-located with the module that reads it |
+  | `episode_viewer.html` → `minecraft_recorder/episode_viewer.html` | Bundled via `importlib.resources` for the `viewer` subcommand |
+
+- **`pyproject.toml` rewritten** — added `[project.scripts]` (`minecraft-recorder`, `minecraft-server`), `[tool.setuptools.package-data]`, full metadata (`readme`, `license`, `authors`, `keywords`, `classifiers`, `[project.urls]`), `[tool.pytest.ini_options]`.
+
+- **`minecraft_recorder/__main__.py`**: removed `_REPO_ROOT` / `sys.path.insert` hack; replaced `importlib.util` dynamic load of `minecraft_server.py` with `from minecraft_recorder.server import RconClient`; episode output path changed from `_REPO_ROOT / "episodes"` to `Path.cwd() / "episodes"` so it always writes to the user's working directory; added `--version` flag; added `viewer` subcommand.
+
+- **`minecraft_recorder/server.py`**: `SERVER_DIR` changed from `Path(__file__).parent / "server"` (inside site-packages) to `Path.cwd() / "server"` (user's working directory); implemented `_apply_world_config()` which reads the bundled `world_config.yaml` — the file was documented but never actually read by any code.
+
+- **`minecraft_test_chambers/chamber_loader.py`**: `_CHAMBERS_DIR` changed from `_REPO_ROOT / "test_chambers"` to `Path(__file__).parent / "chambers"` so chambers are found in the installed package.
+
+- **`tests/test_chamber_loader.py`**: removed `sys.path.insert` hack; import changed from `from minecraft_server import RconClient` to `from minecraft_recorder.server import RconClient`.
+
+- **`LICENSE`** (MIT) created.
+
+- **`.markdownlint.json`** created — enables `MD024: siblings_only` so repeated `### Added` / `### Fixed` section headings across changelog versions don't trigger linter warnings.
 
 ---
 

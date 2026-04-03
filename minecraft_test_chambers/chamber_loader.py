@@ -21,9 +21,8 @@ from minecraft_test_chambers.generators.ore import OreGenerator
 from minecraft_test_chambers.generators.structure import StructureGenerator
 from minecraft_test_chambers.generators.tree import TreeGenerator
 
-# Resolve test_chambers/ relative to this package's parent (repo root)
-_REPO_ROOT = Path(__file__).parent.parent
-_CHAMBERS_DIR = _REPO_ROOT / "test_chambers"
+# Chambers live inside the package at minecraft_test_chambers/chambers/
+_CHAMBERS_DIR = Path(__file__).parent / "chambers"
 
 # Ground-floor Y coordinate when no tp_y is specified in YAML
 _DEFAULT_TP_Y = -57

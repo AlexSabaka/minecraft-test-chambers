@@ -4,8 +4,8 @@ Procedurally-generated Minecraft test chambers for recording human playthroughs 
 
 ## How it works
 
-```
-python -m minecraft_recorder start --chamber desert_tomb
+```bash
+minecraft-recorder start --chamber desert_tomb
 ```
 
 1. Python loads the chamber world via RCON (mobs, structures, weather, time).
@@ -25,42 +25,55 @@ Each line in an episode file is one player action:
 
 ## Project layout
 
-```
-minecraft_recorder/       Python CLI (chamber loader + RCON orchestration)
-  __main__.py             Entry point: start / validate / aggregate / merge-visual / dump-tools
-  episode_writer.py       iter_records() + validate_episode() utilities
-  screenshot_capture.py   Screenshot capture + syncer thread
-  tool_definitions.py     JSON schemas for the 7 action primitives
+```text
+minecraft_recorder/           Python CLI + server management
+  __main__.py                 Entry: start / validate / aggregate / merge-visual / viewer / dump-tools
+  server.py                   Server lifecycle + RconClient (minecraft-server entry point)
+  episode_writer.py           iter_records(), validate_episode(), aggregate_episode()
+  screenshot_capture.py       ScreenshotSyncer + merge_visual()
+  tool_definitions.py         JSON schemas for the 7 action primitives
+  world_config.yaml           Default gamerules applied on server start
+  episode_viewer.html         Bundled browser-based episode viewer
 
-recorder_plugin/          Paper plugin (Java) — the authoritative recorder
-  src/…/RecorderPlugin.java   Plugin main + /recorder command
+recorder_plugin/              Paper plugin (Java) — the authoritative recorder
+  src/…/RecorderPlugin.java       Plugin main + /recorder command
   src/…/PlayerRecorderListener.java  All Bukkit event handlers
   src/…/EpisodeWriter.java    Thread-safe JSONL writer
-  src/…/ObsSnapshot.java      Player state capture
+  src/…/ObsSnapshot.java      Player state snapshot
 
-minecraft_test_chambers/   Chamber definitions (Python generators)
-test_chambers/             YAML config files for each chamber (22 scenarios)
-episodes/                  Recorded JSONL files (git-ignored)
-server/                    Paper 1.20.6 server files (git-ignored)
-minecraft_server.py        Server lifecycle + RCON client
-episode_viewer.html        Browser-based episode viewer (open locally)
+minecraft_test_chambers/      Chamber definitions (Python generators)
+  generators/                 One class per feature type
+  chamber_loader.py           YAML → RCON command list
+  chambers/                   22 YAML chamber scenarios (bundled package data)
+
+episodes/                     Recorded JSONL files — written to CWD/episodes/ (git-ignored)
+server/                       Paper 1.20.6 server files — managed in CWD/server/ (git-ignored)
 ```
 
 ## Setup
 
 ### Prerequisites
+
 - Java 21+, Python 3.10+, Maven 3.9+
-- Paper 1.20.6 server (files in `server/`)
+- A Paper 1.20.6 server set up via `minecraft-server setup` (see below)
 
 ### Install
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"        # tests + linting
-pip install -e ".[recorder]"   # screenshot capture (macOS only, optional)
+# From PyPI (recommended)
+pip install minecraft-test-chambers
+pip install "minecraft-test-chambers[recorder]"  # + screenshot capture
+
+# Or run directly with uvx (no install needed)
+uvx minecraft-test-chambers --help
+
+# Editable dev install from source
+pip install -e ".[dev,recorder]"
 ```
 
 ### Build & install the plugin
+
+The server-side recorder plugin must be built from source and dropped into the Paper plugins folder — it is not distributed via PyPI.
 
 ```bash
 cd recorder_plugin
@@ -68,26 +81,32 @@ mvn package -q
 cp target/RecorderPlugin.jar ../server/plugins/
 ```
 
-Restart the server (or `/reload confirm`) to load the plugin.
-
-### Run the server
+### Set up and run the server
 
 ```bash
-cd server && java -Xmx2G -jar paper-1.20.6-151.jar --nogui
+# Download Paper JAR, verify config, apply world_config.yaml defaults
+minecraft-server setup
+
+# Start server in the background (blocks until RCON is ready)
+minecraft-server start
+
+# Check status / stop
+minecraft-server status
+minecraft-server stop
 ```
 
 ### Record a session
 
 ```bash
-# In a second terminal:
-python -m minecraft_recorder start --chamber desert_tomb
+# In a second terminal (server must be running):
+minecraft-recorder start --chamber desert_tomb
 # Play in Minecraft, then Ctrl-C to stop.
 ```
 
 Optional flags:
 
 ```bash
-python -m minecraft_recorder start --chamber desert_tomb \
+minecraft-recorder start --chamber desert_tomb \
   --screenshots        \  # capture game-window frames alongside the episode
   --format minerl      \  # record raw MineRL control space instead of semantic actions
   --duration 120       \  # auto-stop after 120 seconds
@@ -108,13 +127,13 @@ Pass `--window ""` to force full-screen capture on any platform.
 ### Validate recordings
 
 ```bash
-python -m minecraft_recorder validate episodes/*.jsonl
+minecraft-recorder validate episodes/*.jsonl
 ```
 
 ### Aggregate navigate records
 
 ```bash
-python -m minecraft_recorder aggregate episodes/episode.jsonl
+minecraft-recorder aggregate episodes/episode.jsonl
 ```
 
 Merges chains of consecutive tick-generated `navigate` records into single path records, writing a `_aggregated.jsonl` output. Useful for reducing noise in training data. Also available as `--aggregate` on `start`.
@@ -122,14 +141,22 @@ Merges chains of consecutive tick-generated `navigate` records into single path 
 ### Merge screenshot sidecar
 
 ```bash
-python -m minecraft_recorder merge-visual episodes/episode.jsonl
+minecraft-recorder merge-visual episodes/episode.jsonl
 ```
 
 Combines the `_visual.jsonl` frames captured by `--screenshots` into the episode file as `image_b64` fields, writing a `_merged.jsonl` output.
 
+### Open the episode viewer
+
+```bash
+minecraft-recorder viewer
+```
+
+Opens the bundled `episode_viewer.html` in the default browser. Load any episode JSONL file directly — no server needed.
+
 ### Add a chamber
 
-Add a YAML file to `test_chambers/` and a generator class under `minecraft_test_chambers/generators/`. See existing chambers for the pattern.
+Add a YAML file to `minecraft_test_chambers/chambers/` and a generator class under `minecraft_test_chambers/generators/`. See existing chambers for the pattern.
 
 ## Rebuilding the plugin after changes
 

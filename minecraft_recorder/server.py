@@ -1,18 +1,19 @@
-#!/usr/bin/env python3
-"""minecraft_server.py — Download, configure, start and stop a Paper 1.20.6 server.
+"""server.py — Download, configure, start and stop a Paper 1.20.6 server.
 
-Usage:
-    venv/bin/python3 scripts/minecraft_server.py setup    # download JAR + write config
-    venv/bin/python3 scripts/minecraft_server.py start    # start server in background
-    venv/bin/python3 scripts/minecraft_server.py stop     # gracefully stop server
-    venv/bin/python3 scripts/minecraft_server.py status   # check if running
-    venv/bin/python3 scripts/minecraft_server.py reset-world  # delete world/ for clean start
+Usage (after ``pip install minecraft-test-chambers``)::
 
-The server process is tracked via a PID file at server/.server.pid.
+    minecraft-server setup        # download Paper JAR + verify config
+    minecraft-server start        # start server in background
+    minecraft-server stop         # gracefully stop server
+    minecraft-server status       # check if running
+    minecraft-server reset-world  # delete world/ for a clean start
 
-Server directory: server/
-RCON password: minecraft_dev (port 25575, localhost only)
-Game port: 25565
+The server process is tracked via a PID file at ``server/.server.pid``
+in the current working directory.
+
+Server directory : ./server/  (relative to CWD when command is run)
+RCON password    : minecraft_dev  (port 25575, localhost only)
+Game port        : 25565
 """
 
 from __future__ import annotations
@@ -37,10 +38,15 @@ except ImportError:
     _CHAMBERS_AVAILABLE = False
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-ROOT = Path(__file__).parent
-SERVER_DIR = ROOT / "server"
-PID_FILE = SERVER_DIR / ".server.pid"
-LOG_FILE = SERVER_DIR / "server.log"
+# Server directory is always relative to the user's working directory, not the
+# installed package location. This allows `minecraft-server` to be run from any
+# project directory and have the server/ folder created there.
+SERVER_DIR = Path.cwd() / "server"
+PID_FILE   = SERVER_DIR / ".server.pid"
+LOG_FILE   = SERVER_DIR / "server.log"
+
+# Bundled world configuration (applied on server start)
+_WORLD_CONFIG = Path(__file__).parent / "world_config.yaml"
 
 MINECRAFT_VERSION = "1.20.6"
 PAPER_API = "https://api.papermc.io/v2/projects/paper/versions/{version}/builds"
@@ -280,7 +286,7 @@ def _require_jar() -> Path:
     if not jar:
         sys.exit(
             "  ERROR: Paper JAR not found. Run:\n"
-            "    venv/bin/python3 scripts/minecraft_server.py setup"
+            "    minecraft-server setup"
         )
     return jar
 
@@ -291,7 +297,7 @@ def _require_jar() -> Path:
 
 def cmd_setup() -> None:
     """Download Paper JAR and verify config files are in place."""
-    print("=== minecraft_server.py setup ===")
+    print("=== minecraft-server setup ===")
     SERVER_DIR.mkdir(parents=True, exist_ok=True)
 
     # Download JAR
@@ -305,6 +311,25 @@ def cmd_setup() -> None:
         print(f"  Config OK: {fname}")
 
     print(f"\n  Setup complete. JAR: {jar.name}")
+
+def _apply_world_config() -> None:
+    """Read world_config.yaml and apply gamerules + worldborder via RCON."""
+    import yaml  # pyyaml is a core dependency
+    config: dict = {}
+    if _WORLD_CONFIG.exists():
+        with _WORLD_CONFIG.open() as fh:
+            config = yaml.safe_load(fh) or {}
+
+    gamerules: dict = config.get("default_gamerules", {})
+    worldborder: int = config.get("worldborder", 64)
+
+    print("  Applying world_config.yaml defaults…")
+    for rule, value in gamerules.items():
+        resp = _rcon_send(f"gamerule {rule} {value}")
+        print(f"    {'✓' if resp is not None else '✗'} gamerule {rule} {value}")
+    resp = _rcon_send(f"worldborder set {worldborder}")
+    print(f"    {'✓' if resp is not None else '✗'} worldborder set {worldborder}")
+
 
 def cmd_start() -> None:
     """Start the Paper server in the background."""
@@ -335,23 +360,8 @@ def cmd_start() -> None:
         print(f"\n  ✗ Server did not become ready within 120s — check {LOG_FILE}")
         sys.exit(1)
 
-    # Set eval-friendly gamerules (reset to defaults on every fresh world)
-    _eval_gamerules = [
-        ("doMobSpawning",   "false"),   # no random mob spawns
-        ("keepInventory",   "true"),    # no item loss on death
-        ("doDaylightCycle", "false"),   # freeze time (scenarios set it via RCON)
-        ("doWeatherCycle",  "false"),   # freeze weather
-        ("doFireTick",      "false"),   # no fire spread
-        ("mobGriefing",     "false"),   # no creeper/enderman griefing
-    ]
-    print("  Setting eval gamerules…")
-    for rule, value in _eval_gamerules:
-        resp = _rcon_send(f"gamerule {rule} {value}")
-        status = "✓" if resp is not None else "✗"
-        print(f"    {status} gamerule {rule} {value}")
-    # Constrain agent to 64-block worldborder (≈ 1 chunk radius)
-    resp = _rcon_send("worldborder set 64")
-    print(f"    {'✓' if resp is not None else '✗'} worldborder set 64")
+    # Apply eval-friendly defaults from world_config.yaml
+    _apply_world_config()
 
 
 def cmd_stop() -> None:
@@ -412,7 +422,7 @@ def cmd_load_chamber(name: str, seed: int | None, dry_run: bool) -> None:
     if not dry_run and not is_server_running():
         sys.exit(
             "  ERROR: Server is not running. Start it first:\n"
-            "    python minecraft_server.py start"
+            "    minecraft-server start"
         )
 
     if dry_run:
@@ -452,7 +462,7 @@ def cmd_reset_world() -> None:
             print(f"  Deleted {world_dir}/")
 
     print("  World reset. Restart with:")
-    print("    venv/bin/python3 scripts/minecraft_server.py start")
+    print("    minecraft-server start")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
