@@ -47,12 +47,25 @@ def validate_episode(path: Path) -> list[str]:
     ``"action"``), validates that each record has both ``"controls"`` and
     ``"obs"`` keys and returns early without checking semantic action names.
 
+    Also checks for temporal gaps > 2 s between consecutive records.
+
     Returns a list of error strings (empty = all OK).
     """
     from .tool_definitions import TOOLS_BY_NAME
 
     errors: list[str] = []
+    prev_end: float | None = None
+
     for i, record in enumerate(iter_records(path)):
+        # Temporal gap check
+        ts_start = record.get("ts_start") or record.get("ts_end")
+        ts_end   = record.get("ts_end")
+        if prev_end is not None and ts_start is not None and ts_start - prev_end > 2.0:
+            errors.append(
+                f"Record {i}: gap of {ts_start - prev_end:.1f}s since previous record"
+            )
+        prev_end = ts_end
+
         if "controls" in record:
             # MineRL format — validate controls + obs presence per record
             _validate_minerl_record(i, record, errors)
@@ -69,6 +82,56 @@ def validate_episode(path: Path) -> list[str]:
             if req not in args:
                 errors.append(f"Record {i} action={name}: missing required arg '{req}'")
     return errors
+
+
+def aggregate_episode(path: Path) -> Path:
+    """
+    Merge consecutive ``navigate`` records into single path records.
+
+    Two navigate records are merged when the ``to`` position of record N
+    equals the ``from`` position of record N+1 (i.e. the tick sequence is a
+    continuous walk with no intervening action).  The merged record spans
+    ``ts_start`` of the first through ``ts_end`` of the last.
+
+    Writes to ``{stem}_aggregated.jsonl`` and returns that path.
+    """
+    records = list(iter_records(path))
+    out: list[dict] = []
+    i = 0
+    while i < len(records):
+        rec = records[i]
+        if rec.get("action") != "navigate":
+            out.append(rec)
+            i += 1
+            continue
+        # Accumulate a chain of consecutive navigate records
+        chain = [rec]
+        while (
+            i + len(chain) < len(records)
+            and records[i + len(chain)].get("action") == "navigate"
+            and records[i + len(chain)]["args"].get("from") == chain[-1]["args"].get("to")
+        ):
+            chain.append(records[i + len(chain)])
+        if len(chain) == 1:
+            out.append(rec)
+        else:
+            merged = dict(rec)
+            f = chain[0]["args"]["from"]
+            t = chain[-1]["args"]["to"]
+            merged["args"] = {"from": f, "to": t}
+            merged["result"] = (
+                f"Moved from [{f[0]:.0f},{f[1]:.0f},{f[2]:.0f}] "
+                f"to [{t[0]:.0f},{t[1]:.0f},{t[2]:.0f}]."
+            )
+            merged["ts_end"] = chain[-1]["ts_end"]
+            out.append(merged)
+        i += len(chain)
+
+    out_path = path.with_name(path.stem + "_aggregated.jsonl")
+    with out_path.open("w", encoding="utf-8") as fh:
+        for r in out:
+            fh.write(json.dumps(r) + "\n")
+    return out_path
 
 
 def _validate_minerl_record(i: int, record: dict, errors: list[str]) -> None:

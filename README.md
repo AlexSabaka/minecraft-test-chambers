@@ -27,7 +27,7 @@ Each line in an episode file is one player action:
 
 ```
 minecraft_recorder/       Python CLI (chamber loader + RCON orchestration)
-  __main__.py             Entry point: start / validate / merge-visual / dump-tools
+  __main__.py             Entry point: start / validate / aggregate / merge-visual / dump-tools
   episode_writer.py       iter_records() + validate_episode() utilities
   screenshot_capture.py   Screenshot capture + syncer thread
   tool_definitions.py     JSON schemas for the 7 action primitives
@@ -90,14 +90,34 @@ Optional flags:
 python -m minecraft_recorder start --chamber desert_tomb \
   --screenshots        \  # capture game-window frames alongside the episode
   --format minerl      \  # record raw MineRL control space instead of semantic actions
-  --duration 120          # auto-stop after 120 seconds
+  --duration 120       \  # auto-stop after 120 seconds
+  --aggregate             # post-process: merge consecutive navigate records
 ```
+
+Screenshot capture isolates the game window on all platforms:
+
+| Platform        | Method                   | Prerequisite                                  |
+|-----------------|--------------------------|-----------------------------------------------|
+| macOS           | Quartz + `screencapture` | included in `.[recorder]`                     |
+| Windows         | `win32gui` + mss region  | included in `.[recorder]`                     |
+| Linux (X11)     | `xdotool` + mss region   | `apt install xdotool` / `pacman -S xdotool`   |
+| Linux (Wayland) | mss full-screen fallback | none                                          |
+
+Pass `--window ""` to force full-screen capture on any platform.
 
 ### Validate recordings
 
 ```bash
 python -m minecraft_recorder validate episodes/*.jsonl
 ```
+
+### Aggregate navigate records
+
+```bash
+python -m minecraft_recorder aggregate episodes/episode.jsonl
+```
+
+Merges chains of consecutive tick-generated `navigate` records into single path records, writing a `_aggregated.jsonl` output. Useful for reducing noise in training data. Also available as `--aggregate` on `start`.
 
 ### Merge screenshot sidecar
 

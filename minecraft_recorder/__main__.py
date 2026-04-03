@@ -202,6 +202,15 @@ def cmd_start(args: argparse.Namespace) -> int:
         except Exception as exc:  # noqa: BLE001
             print(f"[screenshot] Warning: merge failed: {exc}", file=sys.stderr)
 
+    # ── Aggregate consecutive navigate records (optional) ─────────────────────
+    if args.aggregate and episode_path is not None:
+        from minecraft_recorder.episode_writer import aggregate_episode
+        try:
+            agg_path = aggregate_episode(episode_path)
+            print(f"[aggregate] Aggregated → {agg_path.name}", file=sys.stderr)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[aggregate] Warning: aggregation failed: {exc}", file=sys.stderr)
+
     return 0
 
 
@@ -291,6 +300,15 @@ def cmd_dump_tools(_args: argparse.Namespace) -> int:
     return 0
 
 
+# ─── Subcommand: aggregate ────────────────────────────────────────────────────
+
+def cmd_aggregate(args: argparse.Namespace) -> int:
+    from minecraft_recorder.episode_writer import aggregate_episode
+    out = aggregate_episode(args.episode)
+    print(f"Aggregated episode written to: {out}")
+    return 0
+
+
 # ─── Argument parser ──────────────────────────────────────────────────────────
 
 def build_parser() -> argparse.ArgumentParser:
@@ -326,6 +344,8 @@ def build_parser() -> argparse.ArgumentParser:
                               "or 'minerl' (raw MineRL control-space per 500 ms tick)")
     p_start.add_argument("--duration", type=float, default=None, metavar="SECONDS",
                          help="Auto-stop after N seconds (default: wait for Ctrl-C)")
+    p_start.add_argument("--aggregate", action="store_true",
+                         help="Post-process episode to merge consecutive navigate records")
     p_start.add_argument("--verbose", action="store_true")
 
     # validate
@@ -348,6 +368,11 @@ def build_parser() -> argparse.ArgumentParser:
     # dump-tools
     sub.add_parser("dump-tools", help="Print MCP tools/list JSON to stdout")
 
+    # aggregate
+    p_agg = sub.add_parser("aggregate",
+                            help="Merge consecutive navigate records in a JSONL episode")
+    p_agg.add_argument("episode", type=Path, help="Path to episode JSONL file")
+
     return parser
 
 
@@ -362,6 +387,7 @@ def main(argv: list[str] | None = None) -> int:
         "validate":     cmd_validate,
         "merge-visual": cmd_merge_visual,
         "dump-tools":   cmd_dump_tools,
+        "aggregate":    cmd_aggregate,
     }
     return dispatch[args.subcommand](args)
 

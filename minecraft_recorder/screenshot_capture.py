@@ -16,13 +16,20 @@ Each sidecar entry::
 After recording, ``merge_visual`` pairs each episode action record with the
 sidecar entry whose ``ts`` is nearest to the action's ``ts_end``.
 
-Window capture (macOS)
-----------------------
-The Minecraft game window is located via ``Quartz`` (pyobjc-framework-Quartz)
-and captured with ``screencapture -l <windowID> -x`` so only the game view is
-saved — no desktop, dock, or other windows bleed through.  Falls back to
-full-screen ``mss`` / ``PIL.ImageGrab`` when the window cannot be found or on
-non-macOS platforms.
+Window capture
+--------------
+Platform dispatch in ``_grab_png_bytes``:
+
+* **macOS** — Quartz ``CGWindowListCopyWindowInfo`` finds the window ID;
+  ``screencapture -l <id> -x`` captures it without compositor bleed.
+* **Windows** — ``win32gui.EnumWindows`` finds the HWND; ``mss`` captures
+  the window rect.  Requires ``pywin32`` (``pip install -e ".[recorder]"``).
+* **Linux (X11)** — ``xdotool search --name`` finds the window ID;
+  ``xdotool getwindowgeometry`` gets the rect; ``mss`` captures the region.
+  Requires the ``xdotool`` system package.
+* **Linux (Wayland)** — ``xdotool`` does not work on Wayland; falls back to
+  full-screen ``mss`` capture.
+* **Fallback** — ``mss`` full-screen → ``PIL.ImageGrab`` on any failure.
 """
 from __future__ import annotations
 
@@ -49,6 +56,50 @@ if sys.platform == "darwin":
         _QUARTZ_OK = False
 else:
     _QUARTZ_OK = False
+
+
+# ─── Windows window detection ─────────────────────────────────────────────────
+
+if sys.platform == "win32":
+    try:
+        import ctypes as _ctypes
+        import win32gui as _win32gui  # pywin32
+        _WIN32_OK = True
+        # Enable per-monitor DPI awareness so GetWindowRect returns physical pixels.
+        try:
+            _ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except Exception:   # noqa: BLE001
+            pass
+    except ImportError:
+        _WIN32_OK = False
+else:
+    _WIN32_OK = False
+
+
+def _find_window_rect_win32(search: str) -> tuple[int, int, int, int] | None:
+    """
+    Return ``(left, top, width, height)`` of the first visible window whose
+    title contains *search* (case-insensitive).
+
+    Requires ``pywin32``.  Returns ``None`` when not on Windows, pywin32 is
+    absent, or no matching window is found.
+    """
+    if not _WIN32_OK:
+        return None
+    needle = search.lower()
+    matches: list[int] = []
+
+    def _enum_cb(hwnd: int, _: None) -> bool:
+        if _win32gui.IsWindowVisible(hwnd):
+            if needle in _win32gui.GetWindowText(hwnd).lower():
+                matches.append(hwnd)
+        return True
+
+    _win32gui.EnumWindows(_enum_cb, None)
+    if not matches:
+        return None
+    left, top, right, bottom = _win32gui.GetWindowRect(matches[0])
+    return left, top, right - left, bottom - top
 
 
 def _find_window_id(search: str = "Minecraft") -> int | None:
@@ -103,6 +154,40 @@ def _screencapture_window(window_id: int) -> bytes:
             pass
 
 
+# ─── Linux window detection ───────────────────────────────────────────────────
+
+def _find_window_rect_linux(search: str) -> tuple[int, int, int, int] | None:
+    """
+    Use ``xdotool`` to locate the first visible window matching *search* and
+    return its ``(x, y, width, height)`` in screen coordinates.
+
+    Returns ``None`` on Wayland (``XDG_SESSION_TYPE=wayland``), when
+    ``xdotool`` is not installed, or on any other failure.
+    """
+    if os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland":
+        return None  # xdotool does not work under Wayland; use full-screen fallback
+    try:
+        found = subprocess.run(
+            ["xdotool", "search", "--name", search, "--onlyvisible"],
+            capture_output=True, text=True, timeout=2,
+        )
+        wids = found.stdout.strip().splitlines()
+        if not wids:
+            return None
+        geo = subprocess.run(
+            ["xdotool", "getwindowgeometry", "--shell", wids[0]],
+            capture_output=True, text=True, timeout=2,
+        )
+        props = dict(
+            line.split("=", 1)
+            for line in geo.stdout.strip().splitlines()
+            if "=" in line
+        )
+        return int(props["X"]), int(props["Y"]), int(props["WIDTH"]), int(props["HEIGHT"])
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, KeyError, OSError):
+        return None
+
+
 # ─── Screenshot helpers ───────────────────────────────────────────────────────
 
 def _grab_full_screen_png_bytes() -> bytes:
@@ -130,24 +215,45 @@ def _grab_full_screen_png_bytes() -> bytes:
     )
 
 
+def _grab_region_png_bytes(left: int, top: int, width: int, height: int) -> bytes:
+    """Capture a screen region using ``mss`` and return raw PNG bytes."""
+    import mss        # type: ignore[import]
+    import mss.tools  # type: ignore[import]
+    with mss.mss() as sct:
+        shot = sct.grab({"left": left, "top": top, "width": width, "height": height})
+        return mss.tools.to_png(shot.rgb, shot.size)
+
+
 def _grab_png_bytes(window_search: str = "Minecraft") -> bytes:
     """
     Grab a PNG of the game window if discoverable, otherwise fall back to the
     primary monitor.
 
-    Parameters
-    ----------
-    window_search:
-        Substring to search for in window owner / title (case-insensitive).
-        Pass ``""`` to always use full-screen capture.
+    Dispatches to the platform-specific window finder:
+
+    * macOS   — Quartz CGWindowNumber + ``screencapture -l``
+    * Windows — win32gui HWND + mss region capture
+    * Linux   — xdotool geometry + mss region capture (X11 only; Wayland falls back)
+
+    Pass ``window_search=""`` to always use full-screen capture.
     """
-    if window_search and sys.platform == "darwin":
-        win_id = _find_window_id(window_search)
-        if win_id is not None:
-            try:
+    if not window_search:
+        return _grab_full_screen_png_bytes()
+    try:
+        if sys.platform == "darwin":
+            win_id = _find_window_id(window_search)
+            if win_id is not None:
                 return _screencapture_window(win_id)
-            except Exception:   # noqa: BLE001
-                pass            # fall through to full-screen
+        elif sys.platform == "win32":
+            rect = _find_window_rect_win32(window_search)
+            if rect is not None:
+                return _grab_region_png_bytes(*rect)
+        elif sys.platform.startswith("linux"):
+            rect = _find_window_rect_linux(window_search)
+            if rect is not None:
+                return _grab_region_png_bytes(*rect)
+    except Exception:   # noqa: BLE001
+        pass            # fall through to full-screen
     return _grab_full_screen_png_bytes()
 
 
@@ -257,9 +363,11 @@ class ScreenshotSyncer:
     interval_ms:
         Screenshot cadence in milliseconds (default 500).
     window_search:
-        Substring used to locate the game window (case-insensitive match
-        against CGWindow owner / title on macOS).  Pass ``""`` to always
-        capture the full screen.
+        Substring used to locate the game window (case-insensitive).
+        On macOS matched against CGWindow owner/title via Quartz.
+        On Windows matched against window title via win32gui.
+        On Linux (X11) matched via ``xdotool search --name``.
+        Pass ``""`` to always capture the full screen.
     verbose:
         Print a status line to stderr for each captured frame.
     """
@@ -325,9 +433,14 @@ class ScreenshotSyncer:
     def _capture(self) -> str:
         """Grab one frame and return base64 PNG.  Never raises."""
         try:
-            win_id = self._get_window_id()
-            png    = (_screencapture_window(win_id) if win_id is not None
-                      else _grab_full_screen_png_bytes())
+            if sys.platform == "darwin":
+                # Use cached CGWindowNumber to avoid repeated Quartz calls.
+                win_id = self._get_window_id()
+                png    = (_screencapture_window(win_id) if win_id is not None
+                          else _grab_full_screen_png_bytes())
+            else:
+                # Windows / Linux: _grab_png_bytes() handles detection + capture.
+                png = _grab_png_bytes(self._window_search)
             return base64.b64encode(png).decode()
         except Exception as exc:    # noqa: BLE001
             print(f"[screenshot] Capture failed: {exc}", file=sys.stderr)
@@ -354,9 +467,13 @@ class ScreenshotSyncer:
 
             self._count += 1
             if self._verbose:
+                platform_tag = (
+                    f"win_id={self._window_id}" if sys.platform == "darwin"
+                    else f"platform={sys.platform}"
+                )
                 print(
                     f"[screenshot] #{self._count}  ts={ts:.3f}  "
-                    f"win_id={self._window_id}  size={len(image_b64)} chars",
+                    f"{platform_tag}  size={len(image_b64)} chars",
                     file=sys.stderr,
                 )
 

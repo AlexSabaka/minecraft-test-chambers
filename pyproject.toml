@@ -15,8 +15,10 @@ dev = [
 ]
 recorder = [
     "anthropic>=0.25",
-    "mss>=9.0",                                              # full-screen fallback
-    "pyobjc-framework-Quartz>=9.0; sys_platform == 'darwin'", # game-window capture
+    "mss>=9.0",                                               # full-screen fallback + region capture
+    "pyobjc-framework-Quartz>=9.0; sys_platform == 'darwin'", # macOS game-window detection
+    "pywin32>=306; sys_platform == 'win32'",                  # Windows game-window detection
+    # Linux: uses xdotool subprocess — no extra Python dep required
 ]
 
 [tool.setuptools.packages.find]

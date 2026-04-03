@@ -90,10 +90,29 @@ public class PlayerRecorderListener implements Listener {
         }
     }
 
+    private static final class GatherPool {
+        final String blockType;
+        int count;
+        final ObsSnapshot obs;  // snapshot at first break — used as ts_start obs
+        final double tsStart;
+        double tsEnd;
+
+        GatherPool(String blockType, ObsSnapshot obs, double ts) {
+            this.blockType = blockType;
+            this.count     = 1;
+            this.obs       = obs;
+            this.tsStart   = ts;
+            this.tsEnd     = ts;
+        }
+
+        void accumulate(double ts) { count++; tsEnd = ts; }
+    }
+
     // ─── Per-player state ─────────────────────────────────────────────────────
 
     private final Map<UUID, CombatInfo>    pendingCombat     = new ConcurrentHashMap<>();
     private final Map<UUID, InventoryInfo> pendingInventory  = new ConcurrentHashMap<>();
+    private final Map<UUID, GatherPool>    pendingGather     = new ConcurrentHashMap<>();
     private final Map<UUID, Location>      lastActionLoc     = new ConcurrentHashMap<>();
     private final Map<UUID, Double>        lastActionTime    = new ConcurrentHashMap<>();
 
@@ -111,7 +130,7 @@ public class PlayerRecorderListener implements Listener {
     // ─── MineRL per-tick input flags ────────────────────────────────────────
     // Set by event handlers; read and cleared each 500 ms tick.
 
-    private final Map<UUID, Boolean> mrlAttack       = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> mrlAttackCount  = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> mrlUse          = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> mrlJump         = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> mrlDrop         = new ConcurrentHashMap<>();
@@ -175,11 +194,12 @@ public class PlayerRecorderListener implements Listener {
      */
     private void maybeWriteNavigate(Player player, ObsSnapshot actionObs, double actionTs) {
         UUID uid = player.getUniqueId();
+        flushGatherPool(uid);  // flush any pending gather before this action
         Location last = lastActionLoc.get(uid);
         if (last != null && last.getWorld() != null
                 && last.getWorld().equals(player.getWorld())) {
             double dist = last.distance(player.getLocation());
-            if (dist > 4.0) {
+            if (dist > 1.0) {
                 double tsPrev = lastActionTime.getOrDefault(uid, actionTs - 5.0);
                 String from = String.format("[%.2f,%.2f,%.2f]",
                         last.getX(), last.getY(), last.getZ());
@@ -207,16 +227,25 @@ public class PlayerRecorderListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
-        if (!shouldRecord(player)) return;        if (mineRLMode) return;
-        double now = EpisodeWriter.nowSecs();
-        ObsSnapshot obs = ObsSnapshot.capture(player);
-        maybeWriteNavigate(player, obs, now);
+        if (!shouldRecord(player)) return;
+        if (mineRLMode) return;
 
+        UUID uid         = player.getUniqueId();
+        double now       = EpisodeWriter.nowSecs();
         String blockType = event.getBlock().getType().getKey().getKey();
-        String argsJson  = "{\"block_type\":\"" + ObsSnapshot.jsonEscape(blockType) + "\",\"count\":1}";
-        String result    = "Mined 1\u00d7 " + blockType + ".";
 
-        writer.write("gather", argsJson, result, obs, now, EpisodeWriter.nowSecs());
+        GatherPool existing = pendingGather.get(uid);
+        if (existing != null && existing.blockType.equals(blockType)) {
+            // Same block type: accumulate silently, no write yet
+            existing.accumulate(now);
+            updateLastAction(player);
+            return;
+        }
+
+        // Block type changed or first break — flush old pool, inject navigate, start new pool
+        ObsSnapshot obs = ObsSnapshot.capture(player);
+        maybeWriteNavigate(player, obs, now);  // also flushes old gather pool
+        pendingGather.put(uid, new GatherPool(blockType, obs, now));
         updateLastAction(player);
     }
 
@@ -242,7 +271,7 @@ public class PlayerRecorderListener implements Listener {
 
             if (mineRLMode) {
                 // In MineRL mode just set the attack flag; no FSM.
-                mrlAttack.put(uid, Boolean.TRUE);
+                mrlAttackCount.merge(uid, 1, Integer::sum);
                 return;
             }
 
@@ -464,7 +493,7 @@ public class PlayerRecorderListener implements Listener {
     public void onBlockDamage(BlockDamageEvent event) {
         Player player = event.getPlayer();
         if (!shouldRecord(player) || !mineRLMode) return;
-        mrlAttack.put(player.getUniqueId(), Boolean.TRUE);
+        mrlAttackCount.merge(player.getUniqueId(), 1, Integer::sum);
     }
 
     /** Right-click on block / air. Sets {@code use} flag. */
@@ -505,14 +534,16 @@ public class PlayerRecorderListener implements Listener {
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         UUID uid = event.getPlayer().getUniqueId();
+        if (isRecording()) flushGatherPool(uid);  // write any pending gather before cleanup
         pendingCombat.remove(uid);
         pendingInventory.remove(uid);
+        pendingGather.remove(uid);
         lastActionLoc.remove(uid);
         lastActionTime.remove(uid);
         tickPrevLoc.remove(uid);
         tickPrevHealth.remove(uid);
         tickPrevFood.remove(uid);
-        mrlAttack.remove(uid);
+        mrlAttackCount.remove(uid);
         mrlUse.remove(uid);
         mrlJump.remove(uid);
         mrlDrop.remove(uid);
@@ -616,7 +647,8 @@ public class PlayerRecorderListener implements Listener {
         while (deltaYaw < -180f) deltaYaw += 360f;
 
         // ─ Event flags (read + clear) ───────────────────────────────────
-        int attack    = Boolean.TRUE.equals(mrlAttack.remove(uid))    ? 1 : 0;
+        int attack    = mrlAttackCount.getOrDefault(uid, 0);
+        mrlAttackCount.remove(uid);
         int use       = Boolean.TRUE.equals(mrlUse.remove(uid))       ? 1 : 0;
         int jump      = Boolean.TRUE.equals(mrlJump.remove(uid))      ? 1 : 0;
         int drop      = Boolean.TRUE.equals(mrlDrop.remove(uid))      ? 1 : 0;
@@ -662,6 +694,7 @@ public class PlayerRecorderListener implements Listener {
     }
 
     private void writeTick(Player player, UUID uid, double now) {
+        flushGatherPool(uid);  // flush any pending gather before the tick record
         ObsSnapshot obs = ObsSnapshot.capture(player);
         Location cur    = player.getLocation();
 
@@ -750,6 +783,15 @@ public class PlayerRecorderListener implements Listener {
         updateLastAction(player);
     }
 
+    private void flushGatherPool(UUID uid) {
+        GatherPool pool = pendingGather.remove(uid);
+        if (pool == null || writer == null) return;
+        String argsJson = "{\"block_type\":\"" + ObsSnapshot.jsonEscape(pool.blockType)
+                        + "\",\"count\":" + pool.count + "}";
+        String result = "Mined " + pool.count + "\u00d7 " + pool.blockType + ".";
+        writer.write("gather", argsJson, result, pool.obs, pool.tsStart, pool.tsEnd);
+    }
+
     private void flushCombatPartialNoPlayer(UUID uid, CombatInfo ci) {
         pendingCombat.remove(uid);
         double now   = EpisodeWriter.nowSecs();
@@ -765,6 +807,10 @@ public class PlayerRecorderListener implements Listener {
         for (var entry : new java.util.ArrayList<>(pendingCombat.entrySet())) {
             flushCombatPartialNoPlayer(entry.getKey(), entry.getValue());
         }
+        // Flush any pending gather pools
+        for (UUID uid : new java.util.ArrayList<>(pendingGather.keySet())) {
+            flushGatherPool(uid);
+        }
         // Pending inventory interactions are discarded on stop (incomplete session).
         pendingInventory.clear();
         // Clear tick baseline state
@@ -772,7 +818,7 @@ public class PlayerRecorderListener implements Listener {
         tickPrevHealth.clear();
         tickPrevFood.clear();
         // Clear MineRL flag maps
-        mrlAttack.clear();
+        mrlAttackCount.clear();
         mrlUse.clear();
         mrlJump.clear();
         mrlDrop.clear();
