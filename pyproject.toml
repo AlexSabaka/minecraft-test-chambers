@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
 authors = [
-    {name = "Oleksii Sabaka", email = "alex.love.broadcast@gmail.com"},
+    {name = "Alex Sabaka", email = "alex.love.broadcast@gmail.com"},
 ]
 keywords = [
     "minecraft",
